@@ -1,51 +1,63 @@
+// netlify/functions/send-to-airtable.js
+
 const Airtable = require('airtable');
 
 exports.handler = async (event) => {
-    // En-têtes CORS pour permettre l'accès depuis votre domaine Shopify
     const headers = {
         'Access-Control-Allow-Origin': 'https://nayorajewelry.com', // REMPLACEZ PAR VOTRE DOMAINE SHOPIFY
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type'
     };
 
-    // Gérer les requêtes OPTIONS (pré-vérification CORS)
     if (event.httpMethod === 'OPTIONS') {
         return {
-            statusCode: 204, // No Content
+            statusCode: 204,
             headers: headers,
-            body: '', // Le corps doit être vide pour une réponse OPTIONS 204
+            body: '',
         };
     }
 
-    // Vérifier la méthode HTTP et le corps pour les requêtes POST
     if (event.httpMethod !== 'POST' || !event.body) {
         return {
-            statusCode: 405, // Méthode non autorisée
+            statusCode: 405,
             headers: headers,
             body: JSON.stringify({ message: 'Méthode non autorisée ou corps manquant.' }),
         };
     }
 
-    let receivedData; // Renommé de requestBody pour plus de clarté
+    let requestBody;
     try {
-        // Le corps de la requête contient directement les données collectées du formulaire
-        receivedData = JSON.parse(event.body);
-        console.log('Données JSON reçues et parsées par la fonction Netlify:', receivedData); // TRÈS IMPORTANT pour déboguer !
+        // Le corps de la requête doit maintenant contenir { formData: ..., dynamicQuestions: ... }
+        requestBody = JSON.parse(event.body);
+        console.log('Corps de la requête JSON reçu par la fonction Netlify:', requestBody); // TRÈS IMPORTANT pour le débogage
     } catch (error) {
-        console.error('Erreur de parsing JSON:', error);
+        console.error('Erreur de parsing JSON du corps de la requête:', error);
         return {
-            statusCode: 400, // Requête invalide
+            statusCode: 400,
             headers: headers,
             body: JSON.stringify({ message: 'Corps de la requête invalide. Le JSON n\'a pas pu être parsé.' }),
         };
     }
 
-    // --- CORRECTION CLÉ ICI ---
-    // La variable `receivedData` contient déjà toutes les données du formulaire (formDataCollected).
-    // Il n'y a pas besoin d'accéder à `receivedData.formData`.
-    const formData = receivedData; 
-    // Si vous envoyiez dynamicQuestions séparément, vous devriez le récupérer ici:
-    // const dynamicQuestions = receivedData.dynamicQuestions; // (décommenter si nécessaire et si vous les envoyez vraiment)
+    // --- RÉCUPÉRATION CORRECTE DES DONNÉES EN FONCTION DU NOUVEAU FORMAT ATTENDU ---
+    const formData = requestBody.formData;             // Les données du formulaire soumises
+    const dynamicQuestions = requestBody.dynamicQuestions; // Les définitions des questions dynamiques
+
+    // Vérifications de base pour s'assurer que les données essentielles sont présentes
+    if (!formData) {
+        console.error('formData est manquant dans le corps de la requête.');
+        return {
+            statusCode: 400,
+            headers: headers,
+            body: JSON.stringify({ message: 'Données du formulaire (formData) manquantes.' }),
+        };
+    }
+    if (!dynamicQuestions || !Array.isArray(dynamicQuestions)) {
+        console.warn("dynamicQuestions n'est pas un tableau valide ou est manquant. Les réponses dynamiques ne pourront pas être liées à l'ID_questions.");
+        // Note: Nous ne retournons pas d'erreur 400 ici pour permettre la soumission même si les questions dynamiques ne peuvent pas être liées.
+        // Si la liaison est MANDATORY, changer en 400.
+    }
+
 
     // Initialisation de la base Airtable
     const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
@@ -60,9 +72,8 @@ exports.handler = async (event) => {
         const supplierRecord = await base(supplierTableName).create(
             [
                 {
-                    // Chaque enregistrement doit être enveloppé dans un objet 'fields'
                     fields: {
-                        "prenom_fournisseur": formData.prenom_fournisseur, // Accès direct à formData
+                        "prenom_fournisseur": formData.prenom_fournisseur,
                         "nom_fournisseur": formData.nom_fournisseur,
                         "email_fournisseur": formData.email_fournisseur,
                         "entreprise_fournisseur": formData.entreprise_fournisseur,
@@ -70,100 +81,87 @@ exports.handler = async (event) => {
                     }
                 }
             ],
-            { typecast: true } // Permet à Airtable de convertir les types de données si nécessaire
+            { typecast: true }
         );
-        console.log('Enregistrement Fournisseur créé:', supplierRecord[0].id); // [0] car create renvoie un tableau
+        console.log('Enregistrement Fournisseur créé:', supplierRecord[0].id);
 
         // 2. Créer l'enregistrement Produit, en le liant au Fournisseur
         const productRecord = await base(productTableName).create(
             [
                 {
-                    // Chaque enregistrement doit être enveloppé dans un objet 'fields'
                     fields: {
                         "nom_produit": formData.nom_produit,
                         "description_produit": formData.description_produit,
-                        // Le champ de lien doit être un tableau d'ID d'enregistrement
                         "ID_fournisseur": [supplierRecord[0].id]
                     }
                 }
             ],
             { typecast: true }
         );
-        console.log('Enregistrement Produit créé:', productRecord[0].id); // [0] car create renvoie un tableau
+        console.log('Enregistrement Produit créé:', productRecord[0].id);
 
         // 3. Traiter et enregistrer les réponses aux questions dynamiques
         const answersToCreate = [];
         
-        // --- Vérification et Mappage des questions dynamiques ---
-        // Votre client n'envoie plus `dynamicQuestions` dans le corps du POST,
-        // donc `questionIdLookupMap` ne peut plus être construit comme avant.
-        // Vous devrez soit:
-        // A) Renvoyer `dynamicQuestions` avec le `formData` dans le POST du client,
-        // B) Ou refaire une requête à `get-form-questions` DANS CETTE FONCTION NETLIFY
-        //    pour obtenir les définitions des questions,
-        // C) Ou vous baser uniquement sur les `indicateur_questions` pour vos noms de colonnes Airtable.
-
-        // Pour l'instant, je vais laisser le code qui utilise `dynamicQuestions`
-        // mais gardez à l'esprit que `dynamicQuestions` sera `undefined`
-        // à moins que vous ne le renvoyiez depuis le client ou ne le récupériez ici.
-        // Si `dynamicQuestions` est undefined, la boucle for..in pour `formData`
-        // sera votre meilleure chance de capturer les champs dynamiques.
-
-        // --- Option C (la plus simple si vous ne renvoyez pas `dynamicQuestions`):
-        // Assurez-vous que les `name` de vos champs HTML dynamiques
-        // (qui sont les `indicateur_questions`) sont les noms exacts des colonnes
-        // dans votre table Airtable "Answers".
-        // Alors, vous n'avez pas besoin de `questionIdLookupMap` ici si chaque réponse dynamique
-        // est insérée dans la table "Answers" avec le nom de la colonne qui correspond à l'indicateur.
+        // Créer une map pour un accès rapide aux ID de question par 'indicateur_questions'
+        const questionIdLookupMap = new Map();
+        if (dynamicQuestions && Array.isArray(dynamicQuestions)) {
+            dynamicQuestions.forEach(q => {
+                if (q.indicateur_questions && q.id_question) {
+                    questionIdLookupMap.set(q.indicateur_questions, q.id_question);
+                }
+            });
+        }
 
         // Parcourir toutes les données soumises par le formulaire
         for (const key in formData) {
-            // Ignorer les champs fixes déjà traités (Fournisseur et Produit)
+            // Ignorer les champs fixes déjà traités (Fournisseur, Produit, et timestamp si présent)
             if ([
                 'prenom_fournisseur', 'nom_fournisseur', 'email_fournisseur',
                 'entreprise_fournisseur', 'siret_fournisseur', 'nom_produit',
-                'description_produit'
+                'description_produit', 'timestamp_soumission' // Ajoutez tous les autres champs "fixes" si nécessaire
             ].includes(key)) {
                 continue;
             }
 
+            const questionId = questionIdLookupMap.get(key); // Tente de trouver l'ID de la question
             let answerValue = formData[key];
 
-            // Gérer les réponses multiples (comme les checkboxes) qui arrivent en tant que tableau
+            // Gérer les réponses multiples (comme les checkboxes)
             if (Array.isArray(answerValue)) {
-                answerValue = answerValue.join(', '); // Convertir le tableau en une chaîne séparée par des virgules
+                answerValue = answerValue.join(', '); // Convertit le tableau en une chaîne séparée par des virgules
             }
 
-            // Si une valeur de réponse est présente et non vide
-            if (answerValue !== undefined && answerValue !== null && answerValue !== '') {
+            // Seulement créer une réponse si la valeur est non vide ET que nous avons un ID de question valide
+            if (answerValue !== undefined && answerValue !== null && String(answerValue).trim() !== '' && questionId) {
                 answersToCreate.push({
-                    fields: { // Chaque réponse doit être enveloppée dans un objet 'fields'
-                        "ID_produit": [productRecord[0].id],  // Lien vers l'ID du produit
-                        // "ID_questions": [questionId],         // <-- CE CHAMP REQUIERT ID_questions.
-                                                              // Si vous n'avez plus dynamicQuestions,
-                                                              // vous ne pouvez plus obtenir questionId.
-                                                              // Alternative : créer une colonne "Réponse de [Indicateur]" dans Airtable
-                                                              // et envoyer directement la clé/valeur.
-                        // Exemple si votre table "Answers" peut stocker n'importe quel champ en tant que réponse:
-                        // [key]: String(answerValue), // Ceci enverra `indicateur_questions` comme nom de colonne.
-                        // Assurez-vous que la colonne `Réponse` dans Airtable est un champ texte simple pour stocker la valeur.
-                        "Réponse_Dynamique": String(answerValue), // Utilisez un champ générique pour stocker la réponse textuelle
-                        // Et si vous voulez lier à la question via son ID, vous devez trouver un moyen de le faire
-                        // soit en le renvoyant depuis le client, soit en le recherchant à nouveau.
-                        // Pour l'instant, je retire la liaison directe à ID_questions ici pour éviter l'erreur.
-                        // Vous devrez ajuster votre table Airtable "Answers" en conséquence.
+                    fields: {
+                        "ID_produit": [productRecord[0].id],  // Liaison à l'enregistrement Produit
+                        "ID_questions": [questionId],         // Liaison à l'enregistrement Question spécifique
+                        "Réponse": String(answerValue),       // Le texte de la réponse (assurez-vous que cette colonne existe et est de type "Single line text" ou "Long text" dans votre table Airtable "Answers")
                     }
                 });
             } else {
-                console.warn(`Aucune valeur de réponse valide pour l'indicateur: ${key}.`);
+                if (!questionId) {
+                    console.warn(`Aucun ID_question trouvé pour l'indicateur "${key}". La réponse "${answerValue}" ne sera pas liée à une question spécifique.`);
+                    // Si vous avez une colonne générique pour les réponses non-liées, vous pourriez l'ajouter ici:
+                    // if (answerValue !== undefined && answerValue !== null && String(answerValue).trim() !== '') {
+                    //     answersToCreate.push({
+                    //         fields: {
+                    //             "ID_produit": [productRecord[0].id],
+                    //             "Réponse_Générique": String(answerValue), // Exemple: ajoutez une colonne "Réponse_Générique" dans Airtable
+                    //             "Nom_Champ_Formulaire": key // Pour savoir de quel champ cela vient
+                    //         }
+                    //     });
+                    // }
+                } else {
+                    console.warn(`Réponse vide ou invalide pour l'indicateur "${key}". Réponse non enregistrée pour cette question.`);
+                }
             }
         }
-        
-        // --- FIN de la vérification et Mappage des questions dynamiques ---
 
-        // Si des réponses dynamiques sont à créer, les envoyer par lots à Airtable
         if (answersToCreate.length > 0) {
-            const batchSize = 10; // Airtable API limite à 10 enregistrements par opération en batch
+            const batchSize = 10;
             for (let i = 0; i < answersToCreate.length; i += batchSize) {
                 const batch = answersToCreate.slice(i, i + batchSize);
                 await base(answersTableName).create(batch, { typecast: true });
@@ -177,8 +175,8 @@ exports.handler = async (event) => {
             headers: headers,
             body: JSON.stringify({
                 message: 'Informations (Fournisseur, Produit, Réponses) envoyées avec succès !',
-                supplierId: supplierRecord[0].id, // Accéder à l'ID du premier élément créé
-                productId: productRecord[0].id,   // Accéder à l'ID du premier élément créé
+                supplierId: supplierRecord[0].id,
+                productId: productRecord[0].id,
             }),
         };
 
