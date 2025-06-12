@@ -1,28 +1,24 @@
 const Airtable = require('airtable');
 
 exports.handler = async (event) => {
-    // Headers CORS à inclure dans toutes les réponses
     const headers = {
-        'Access-Control-Allow-Origin': 'https://nayorajewelry.com', // <--- TRÈS IMPORTANT : REMPLACEZ PAR VOTRE DOMAINE SHOPIFY
+        'Access-Control-Allow-Origin': 'https://nayorajewelry.com', // <--- REMPLACEZ PAR VOTRE DOMAINE SHOPIFY
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        // 'Access-Control-Max-Age': '86400', // Facultatif: met en cache la réponse preflight OPTIONS pour 24h
+        'Access-Control-Allow-Headers': 'Content-Type'
     };
 
-    // Gérer la requête OPTIONS (pré-vérification CORS)
     if (event.httpMethod === 'OPTIONS') {
         return {
-            statusCode: 204, // No Content
+            statusCode: 204,
             headers: headers,
-            body: '', // Le corps doit être vide pour une réponse OPTIONS 204
+            body: '',
         };
     }
 
-    // Vérifier la méthode HTTP et le corps pour les requêtes POST
     if (event.httpMethod !== 'POST' || !event.body) {
         return {
             statusCode: 405,
-            headers: headers, // Inclure les headers CORS même en cas d'erreur de méthode
+            headers: headers,
             body: JSON.stringify({ message: 'Méthode non autorisée ou corps manquant.' }),
         };
     }
@@ -34,7 +30,7 @@ exports.handler = async (event) => {
         console.error('Erreur de parsing JSON:', error);
         return {
             statusCode: 400,
-            headers: headers, // Inclure les headers CORS même en cas d'erreur de parsing
+            headers: headers,
             body: JSON.stringify({ message: 'Corps de la requête invalide.' }),
         };
     }
@@ -63,7 +59,8 @@ exports.handler = async (event) => {
             {
                 "nom_produit": formData.nom_produit,
                 "description_produit": formData.description_produit,
-                "Fournisseur (Link)": [supplierRecord.id]
+                // Le nom du champ de lien est maintenant "ID_fournisseur"
+                "ID_fournisseur": [supplierRecord.id]
             },
             { typecast: true }
         );
@@ -71,7 +68,7 @@ exports.handler = async (event) => {
 
         return {
             statusCode: 200,
-            headers: headers, // TRÈS IMPORTANT : Inclure les headers CORS ici pour la réponse de succès
+            headers: headers,
             body: JSON.stringify({
                 message: 'Informations Fournisseur et Produit envoyées avec succès !',
                 supplierId: supplierRecord.id,
@@ -83,7 +80,7 @@ exports.handler = async (event) => {
         console.error('Erreur lors de l\'envoi à Airtable:', error);
         return {
             statusCode: 500,
-            headers: headers, // TRÈS IMPORTANT : Inclure les headers CORS ici pour la réponse d'erreur
+            headers: headers,
             body: JSON.stringify({ message: `Erreur lors de l'envoi à Airtable: ${error.message}` }),
         };
     }
