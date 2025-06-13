@@ -145,6 +145,9 @@ exports.handler = async (event) => {
         );
         console.log('Enregistrement Produit créé:', productRecord[0].id);
       
+        // Initialisation du score total pour les questions Emat A
+        let totalEmatA_Score = 0;
+
         // Création d'une Map pour stocker les définitions complètes des questions pour un accès rapide (questionLookupMap.get(key)) avec key = l'indicateur_questions
         const questionLookupMap = new Map();
         if (dynamicQuestions && Array.isArray(dynamicQuestions)) {
@@ -178,10 +181,7 @@ exports.handler = async (event) => {
             }
 
             // --- NOUVELLE LOGIQUE POUR CALCULER LES EMATA EN TEMPS RÉEL DANS LA FONCTION ---
-
-            // Initialisation du score total pour les questions Emat A
-            let totalEmatA_Score = 0;
-            if (questionDef && questionDef.categorie_questions === 'EmatA') { // Vérifie si le type de question est 'EmatA'
+            if (questionDef && questionDef.categorie_questions === 'EmatA') { // Vérifie si le type de question est 'EmatA' ( on est tjr dans la boucle for )
                 const numericAnswer = parseFloat(answerValue);
                 const coefficient = parseFloat(questionDef.coeff_questions);
 
@@ -194,7 +194,7 @@ exports.handler = async (event) => {
                     console.warn(`DEBUG SERVER: Réponse non numérique ou coefficient invalide pour question EmatA "${key}": Réponse "${answerValue}", Coeff "${questionDef.coeff_questions}". Cette question n'a pas contribué au total EmatA.`);
                 }
             }
-            // --- FIN DE LA NOUVELLE LOGIQUE POUR LES EMATA ---
+            console.log(`DEBUG SERVER 1: Calcul EmatA pour ${key}: ${numericAnswer} * ${coefficient} = ${individualEmatAScore}. Total EmatA accumulé: ${totalEmatA_Score}`);
 
             // Seulement créer une réponse dans la table "Réponses" si la valeur est non vide ET que nous avons une définition de question valide
             if (answerValue !== undefined && answerValue !== null && String(answerValue).trim() !== '' && questionDef && questionDef.id_question) {
@@ -214,6 +214,7 @@ exports.handler = async (event) => {
             }
         }
         console.log('DEBUG SERVER: answersToCreate AVANT envoi à Airtable:', answersToCreate);
+        console.log(`DEBUG SERVER2: Calcul EmatA pour ${key}: ${numericAnswer} * ${coefficient} = ${individualEmatAScore}. Total EmatA accumulé: ${totalEmatA_Score}`);
 
         // Envoyer les réponses dynamiques à Airtable
         if (answersToCreate.length > 0) {
@@ -236,7 +237,6 @@ exports.handler = async (event) => {
                     fields: {
                         "ID_produit": [productRecord[0].id], // Lier à l'enregistrement Produit créé précédemment
                         "EmatA": totalEmatA_Score,             // La somme calculée des scores EmatA
-                        // Ajoutez ici d'autres champs de score si vous en avez (ex: autres catégories)
                     }
                 }
             ],
