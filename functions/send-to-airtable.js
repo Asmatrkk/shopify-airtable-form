@@ -3,23 +3,26 @@
 const Airtable = require('airtable');
 
 exports.handler = async (event) => {
+    // En-têtes CORS pour permettre l'accès depuis votre domaine Shopify
     const headers = {
         'Access-Control-Allow-Origin': 'https://nayorajewelry.com', // REMPLACEZ PAR VOTRE DOMAINE SHOPIFY
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type'
     };
 
+    // Gérer les requêtes OPTIONS (pré-vérification CORS)
     if (event.httpMethod === 'OPTIONS') {
         return {
-            statusCode: 204,
+            statusCode: 204, // No Content
             headers: headers,
-            body: '',
+            body: '', // Le corps doit être vide pour une réponse OPTIONS 204
         };
     }
 
+    // Vérifier la méthode HTTP et le corps pour les requêtes POST
     if (event.httpMethod !== 'POST' || !event.body) {
         return {
-            statusCode: 405,
+            statusCode: 405, // Méthode non autorisée
             headers: headers,
             body: JSON.stringify({ message: 'Méthode non autorisée ou corps manquant.' }),
         };
@@ -29,11 +32,14 @@ exports.handler = async (event) => {
     try {
         // Le corps de la requête doit maintenant contenir { formData: ..., dynamicQuestions: ... }
         requestBody = JSON.parse(event.body);
-        console.log('Corps de la requête JSON reçu par la fonction Netlify:', requestBody); // TRÈS IMPORTANT pour le débogage
+        // =========================================================================
+        // >>> DEBUG LOG 1 : Corps de la requête JSON reçu par la fonction Netlify <<<
+        console.log('DEBUG SERVER: Corps de la requête JSON reçu par la fonction Netlify:', requestBody);
+        // =========================================================================
     } catch (error) {
         console.error('Erreur de parsing JSON du corps de la requête:', error);
         return {
-            statusCode: 400,
+            statusCode: 400, // Requête invalide
             headers: headers,
             body: JSON.stringify({ message: 'Corps de la requête invalide. Le JSON n\'a pas pu être parsé.' }),
         };
@@ -112,6 +118,10 @@ exports.handler = async (event) => {
                 }
             });
         }
+        // =========================================================================
+        // >>> DEBUG LOG 2 : questionIdLookupMap après création <<<
+        console.log('DEBUG SERVER: questionIdLookupMap après création:', questionIdLookupMap);
+        // =========================================================================
 
         // Parcourir toutes les données soumises par le formulaire
         for (const key in formData) {
@@ -143,7 +153,7 @@ exports.handler = async (event) => {
                 });
             } else {
                 if (!questionId) {
-                    console.warn(`Aucun ID_question trouvé pour l'indicateur "${key}". La réponse "${answerValue}" ne sera pas liée à une question spécifique.`);
+                    console.warn(`DEBUG SERVER: Aucun ID_question trouvé pour l'indicateur "${key}". La réponse "${answerValue}" ne sera pas liée à une question spécifique.`);
                     // Si vous avez une colonne générique pour les réponses non-liées, vous pourriez l'ajouter ici:
                     // if (answerValue !== undefined && answerValue !== null && String(answerValue).trim() !== '') {
                     //     answersToCreate.push({
@@ -155,18 +165,26 @@ exports.handler = async (event) => {
                     //     });
                     // }
                 } else {
-                    console.warn(`Réponse vide ou invalide pour l'indicateur "${key}". Réponse non enregistrée pour cette question.`);
+                    console.warn(`DEBUG SERVER: Réponse vide ou invalide pour l'indicateur "${key}". Réponse non enregistrée pour cette question.`);
                 }
             }
         }
+        // =========================================================================
+        // >>> DEBUG LOG 3 : answersToCreate AVANT envoi à Airtable <<<
+        console.log('DEBUG SERVER: answersToCreate AVANT envoi à Airtable:', answersToCreate);
+        // =========================================================================
 
         if (answersToCreate.length > 0) {
+            console.log(`DEBUG SERVER: Tentative de création de ${answersToCreate.length} réponses dans Airtable.`);
+            // Envoyer par lots si nécessaire
             const batchSize = 10;
             for (let i = 0; i < answersToCreate.length; i += batchSize) {
                 const batch = answersToCreate.slice(i, i + batchSize);
                 await base(answersTableName).create(batch, { typecast: true });
             }
             console.log(`${answersToCreate.length} réponses dynamiques créées.`);
+        } else {
+            console.log('DEBUG SERVER: Aucune réponse dynamique à créer.');
         }
 
         // Retourner une réponse de succès
