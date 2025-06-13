@@ -194,7 +194,6 @@ exports.handler = async (event) => {
                     console.warn(`DEBUG SERVER: Réponse non numérique ou coefficient invalide pour question EmatA "${key}": Réponse "${answerValue}", Coeff "${questionDef.coeff_questions}". Cette question n'a pas contribué au total EmatA.`);
                 }
             }
-            console.log(`DEBUG SERVER 1: Calcul EmatA pour ${key}: ${numericAnswer} * ${coefficient} = ${individualEmatAScore}. Total EmatA accumulé: ${totalEmatA_Score}`);
 
             // Seulement créer une réponse dans la table "Réponses" si la valeur est non vide ET que nous avons une définition de question valide
             if (answerValue !== undefined && answerValue !== null && String(answerValue).trim() !== '' && questionDef && questionDef.id_question) {
@@ -214,7 +213,6 @@ exports.handler = async (event) => {
             }
         }
         console.log('DEBUG SERVER: answersToCreate AVANT envoi à Airtable:', answersToCreate);
-        console.log(`DEBUG SERVER2: Calcul EmatA pour ${key}: ${numericAnswer} * ${coefficient} = ${individualEmatAScore}. Total EmatA accumulé: ${totalEmatA_Score}`);
 
         // Envoyer les réponses dynamiques à Airtable
         if (answersToCreate.length > 0) {
