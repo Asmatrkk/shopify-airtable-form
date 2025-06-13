@@ -1,16 +1,28 @@
-// netlify/functions/send-to-airtable.js
-
+// Importe la bibliothèque Airtable
 const Airtable = require('airtable');
 
+
+/*
+* Définition de la fonction de gestionnaire Netlify
+* exports.handler = async (event) => { ... }; : C'est la signature standard d'une fonction Netlify.
+*/
 exports.handler = async (event) => {
-    // En-têtes CORS pour permettre l'accès depuis votre domaine Shopify
+
+    // ---- En-têtes CORS pour permettre l'accès depuis Shopify
     const headers = {
-        'Access-Control-Allow-Origin': 'https://nayorajewelry.com', // REMPLACEZ PAR VOTRE DOMAINE SHOPIFY
+        // Spécifie les domaines autorisés à faire des requêtes à LA fonction. 
+        'Access-Control-Allow-Origin': 'https://nayorajewelry.com', // REMPLACEZ PAR DOMAINE SHOPIFY DE LOWREKA
+        // Indique les méthodes HTTP autorisées 
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        // Spécifie les en-têtes HTTP autorisés dans les requêtes.
         'Access-Control-Allow-Headers': 'Content-Type'
     };
 
-    // Gérer les requêtes OPTIONS (pré-vérification CORS)
+
+    /*
+    * Gère les requêtes OPTIONS. Les navigateurs envoient une requête OPTIONS
+    * avant une requête POST "réelle" pour vérifier que le serveur autorise la communication cross-origin.
+    */
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 204, // No Content
@@ -19,7 +31,10 @@ exports.handler = async (event) => {
         };
     }
 
-    // Vérifier la méthode HTTP et le corps pour les requêtes POST
+    /* 
+    * Vérifie si la requête entrante est bien une requête POST et qu'elle contient un corps.
+    * Si ce n'est pas le cas, elle renvoie un statut 405 (Method Not Allowed) avec un message d'erreur.
+    */
     if (event.httpMethod !== 'POST' || !event.body) {
         return {
             statusCode: 405, // Méthode non autorisée
@@ -28,47 +43,61 @@ exports.handler = async (event) => {
         };
     }
 
+    /* 
+    * Réception des données saisi 
+    * Parsage du corps de la requête (event.body) qui est une chaîne JSON, en un objet JavaScript.
+    */
     let requestBody;
     try {
         requestBody = JSON.parse(event.body);
-        console.log('DEBUG SERVER: Corps de la requête JSON reçu par la fonction Netlify:', requestBody);
+        console.log('DEBUG SERVER: Corps de la requête JSON bien reçu :', requestBody);
     } catch (error) {
-        console.error('Erreur de parsing JSON du corps de la requête:', error);
+        console.error('Erreur de parsing JSON : ', error);
         return {
             statusCode: 400, // Requête invalide
             headers: headers,
-            body: JSON.stringify({ message: 'Corps de la requête invalide. Le JSON n\'a pas pu être parsé.' }),
+            body: JSON.stringify({ message: 'Le JSON n\'a pas pu être parsé.' }),
         };
     }
 
-    // --- RÉCUPÉRATION CORRECTE DES DONNÉES ---
+    /* --- RÉCUPÉRATION CORRECTE DES DONNÉES ---
+    * Extrait les deux parties principales de l'objet requestBody que le client (Shopify) envoie : 
+    * 1 - Les données soumises par l'utilisateur (formData) 
+    * 2 - La structure/définition des questions (dynamicQuestions).
+    * Documentation pour plus d'infos 
+    */
     const formData = requestBody.formData;
     const dynamicQuestions = requestBody.dynamicQuestions;
 
+    // Vérification formdata et dynamicQuestions
     if (!formData) {
-        console.error('formData est manquant dans le corps de la requête.');
+        console.error('formData manquant');
         return {
             statusCode: 400,
             headers: headers,
-            body: JSON.stringify({ message: 'Données du formulaire (formData) manquantes.' }),
+            body: JSON.stringify({ message: 'Données du formulaire manquantes' }),
         };
     }
     if (!dynamicQuestions || !Array.isArray(dynamicQuestions)) {
         console.warn("dynamicQuestions n'est pas un tableau valide ou est manquant. Les réponses dynamiques ne pourront pas être liées à l'ID_questions ou utilisées pour le calcul EMTA.");
     }
 
-    // Initialisation de la base Airtable
+    /* --- INITIALISATION DE LA BASE AIRTABLE ---
+    * Initialise le client Airtable avec la clé API et l'ID de votre base, qui sont récupérés via process.env 
+    * -> variables d'environnement Netlify, non exposées publiquement pour sécurisé
+    * Documentation pour plus d'infos 
+    * */
     const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
 
-    // Noms des tables Airtable (récupérés des variables d'environnement)
-    const supplierTableName = process.env.AIRTABLE_SUPPLIER_TABLE_NAME;
-    const productTableName = process.env.AIRTABLE_PRODUCT_TABLE_NAME;
-    const answersTableName = process.env.AIRTABLE_ANSWERS_TABLE_NAME;
-    const scoreTableName = process.env.AIRTABLE_SCORE_TABLE_NAME; // NOUVEAU: Nom de la table Score
+    // Noms des tables Airtable : récupérés des variables d'environnement sur Netlify
+    const supplierTableName = process.env.AIRTABLE_SUPPLIER_TABLE_NAME; // Table fournisseur
+    const productTableName = process.env.AIRTABLE_PRODUCT_TABLE_NAME; // Table Produit
+    const answersTableName = process.env.AIRTABLE_ANSWERS_TABLE_NAME; // Table Réponses
+    const scoreTableName = process.env.AIRTABLE_SCORE_TABLE_NAME; // Table Score
 
     // Vérification que le nom de la table Score est bien défini
     if (!scoreTableName) {
-        console.error("AIRTABLE_SCORE_TABLE_NAME n'est pas défini dans les variables d'environnement.");
+        console.error(" La table Score n'est pas correctement défini ou pas défini");
         return {
             statusCode: 500,
             headers: headers,
@@ -76,8 +105,15 @@ exports.handler = async (event) => {
         };
     }
 
+    /* Création des enregistrement 
+        * await base(tableName).create(...) : C'est la méthode de l'API Airtable pour créer un ou plusieurs enregistrements.
+        * -> Elle prend :
+        * - un tableau d'objets fields (où chaque objet représente un enregistrement à créer)
+        * - ET un objet d'options { typecast: true / false }, permet à Airtable de tenter de convertir les types de données 
+        *   ( ex : convertir une chaîne "123" en nombre si le champ Airtable est de type "Nombre")
+        */
     try {
-        // 1. Créer l'enregistrement Fournisseur
+        // 1. Création de l'enregistrement Fournisseur
         const supplierRecord = await base(supplierTableName).create(
             [
                 {
@@ -94,40 +130,36 @@ exports.handler = async (event) => {
         );
         console.log('Enregistrement Fournisseur créé:', supplierRecord[0].id);
 
-        // 2. Créer l'enregistrement Produit, en le liant au Fournisseur
+        // 2. Création de l'enregistrement Produit, en le liant au Fournisseur
         const productRecord = await base(productTableName).create(
             [
                 {
                     fields: {
                         "nom_produit": formData.nom_produit,
                         "description_produit": formData.description_produit,
-                        "ID_fournisseur": [supplierRecord[0].id]
+                        "ID_fournisseur": [supplierRecord[0].id] // Liaison avec le fournisseur -> Airtable attend un tableau d'IDs pour les champs de liaison.
                     }
                 }
             ],
             { typecast: true }
         );
         console.log('Enregistrement Produit créé:', productRecord[0].id);
-
-        // --- NOUVEAU : Initialiser le score total pour les questions EmatA ---
-        let totalEmatA_Score = 0;
-        // --- FIN NOUVEAU ---
-
-        // Créer une map pour un accès rapide aux ID de question et aux définitions complètes
+      
+        // Création d'une Map pour stocker les définitions complètes des questions pour un accès rapide (questionLookupMap.get(key)) avec key = l'indicateur_questions
         const questionLookupMap = new Map();
         if (dynamicQuestions && Array.isArray(dynamicQuestions)) {
             dynamicQuestions.forEach(q => {
-                if (q.indicateur_questions) { // Utilisez indicateur_questions comme clé
-                    questionLookupMap.set(q.indicateur_questions, q); // Stockez l'objet complet de la question
+                if (q.indicateur_questions) { // indicateur_questions comme clé
+                    questionLookupMap.set(q.indicateur_questions, q); // Stockage l'objet complet de la question
                 }
             });
         }
         console.log('DEBUG SERVER: questionLookupMap après création:', questionLookupMap);
 
+        // Création d'un tableau qui va stocker tous les objets fields des réponses dynamiques avant de les envoyer par lots à Airtable.
         const answersToCreate = [];
+        for (const key in formData) {  // Parcour toutes les données soumises par le formulaire
 
-        // Parcourir toutes les données soumises par le formulaire
-        for (const key in formData) {
             // Ignorer les champs fixes déjà traités (Fournisseur, Produit, etc.)
             if ([
                 'prenom_fournisseur', 'nom_fournisseur', 'email_fournisseur',
@@ -146,7 +178,10 @@ exports.handler = async (event) => {
             }
 
             // --- NOUVELLE LOGIQUE POUR CALCULER LES EMATA EN TEMPS RÉEL DANS LA FONCTION ---
-            if (questionDef && questionDef.type_questions === 'EmatA') { // Vérifie si le type de question est 'EmatA'
+
+            // Initialisation du score total pour les questions Emat A
+            let totalEmatA_Score = 0;
+            if (questionDef && questionDef.categorie_questions === 'EmatA') { // Vérifie si le type de question est 'EmatA'
                 const numericAnswer = parseFloat(answerValue);
                 const coefficient = parseFloat(questionDef.coeff_questions);
 
