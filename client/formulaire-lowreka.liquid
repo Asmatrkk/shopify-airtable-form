@@ -1,0 +1,137 @@
+{# sections/formulaire-lowreka.liquid #}
+
+<div class="multi-step-form-wrapper" data-section-id="{{ section.id }}" data-section-type="formulaire-lowreka">
+  <div class="form-sidebar">
+    <div class="logo">
+      <a href="#" id="reset-form-link" aria-label="Retour au début du questionnaire">
+        {# Utiliser asset_url pour les images du thème #}
+        <img src="{{ 'Logo_mouette_blanc_68db3e42-cba4-42f7-8360-c8c82e4a0ace.png' | asset_url }}" alt="Lowreka Logo" style="width: 150px; height: auto;">
+      </a>
+    </div>
+  </div>
+
+  <div class="form-main-content">
+
+    <div class="form-progress-bar" id="form-progress-bar">
+      {# La barre de progression sera générée par JS, ou vous pouvez la coder en Liquid #}
+    </div>
+
+    <form id="airtable-multi-step-form" class="shopify-form">
+
+      <div class="form-step active" data-step="1">
+        <h2>Mon Lowreka Score : La Mesure de l'Impact Low-Tech</h2>
+        <p>Bienvenue, cher(e) partenaire Low-Tech !</p>
+        <p>Vous innovez au quotidien pour un monde plus durable. Nous avons créé cet outil pour vous aider à mesurer concrètement l'impact de vos produits low-tech et à en démontrer la valeur.</p>
+        <p>Nous vous guiderons pas à pas. Êtes-vous prêt(e) à révéler le véritable potentiel de votre low-tech ?</p>
+        <button type="button" class="button next-step">SUIVANT</button>
+      </div>
+
+      <div class="form-step" data-step="2">
+        <div class="form-navigation">
+          <button type="button" class="arrow-button prev-step">←</button>
+          <h3>Étape 1 : Vos Informations et celles de votre Produit</h3>
+        </div>
+        <p>Veuillez renseigner les détails du fournisseur et du produit.</p>
+
+        <h4>Informations Fournisseur</h4>
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="prenom_fournisseur">Prénom du fournisseur</label>
+            <input type="text" id="prenom_fournisseur" name="prenom_fournisseur" required>
+            <div class="form-field-error-message"></div>
+          </div>
+          <div class="form-field">
+            <label for="nom_fournisseur">Nom du fournisseur</label>
+            <input type="text" id="nom_fournisseur" name="nom_fournisseur" required>
+            <div class="form-field-error-message"></div>
+          </div>
+          <div class="form-field">
+            <label for="email_fournisseur">Email du fournisseur</label>
+            <input type="email" id="email_fournisseur" name="email_fournisseur" required>
+            <div class="form-field-error-message"></div>
+          </div>
+          <div class="form-field">
+            <label for="entreprise_fournisseur">Entreprise du fournisseur</label>
+            <input type="text" id="entreprise_fournisseur" name="entreprise_fournisseur" required>
+            <div class="form-field-error-message"></div>
+          </div>
+          <div class="form-field">
+            <label for="siret_fournisseur">SIRET du fournisseur</label>
+            <input type="text" id="siret_fournisseur" name="siret_fournisseur">
+            <div class="form-field-error-message"></div>
+          </div>
+        </div>
+
+        <h4 style="margin-top: 30px;">Informations Produit</h4>
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="nom_produit">Nom du produit</label>
+            <input type="text" id="nom_produit" name="nom_produit" required>
+            <div class="form-field-error-message"></div>
+          </div>
+          <div class="form-field full-width">
+            <label for="description_produit">Description du produit</label>
+            <textarea id="description_produit" name="description_produit" rows="5" required></textarea>
+            <div class="form-field-error-message"></div>
+          </div>
+        </div>
+        <p id="step2-status" class="form-status"></p>
+        <button type="button" class="button next-step">SUIVANT</button>
+      </div>
+
+      <div id="dynamic-form-steps"></div>
+
+      <div class="form-step" data-step="final">
+        <div class="form-navigation">
+          <button type="button" class="arrow-button prev-step">←</button>
+          <h3>Confirmation et Envoi</h3>
+        </div>
+        <p>Veuillez vérifier les informations ci-dessous avant de soumettre.</p>
+
+        <div class="form-summary" id="form-summary">
+        </div>
+
+        <button type="submit" class="button">Envoyer le Formulaire</button>
+        <p id="form-status" style="margin-top: 10px;"></p>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Formulaire Lowreka",
+  "settings": [
+    {
+      "type": "header",
+      "content": "Paramètres généraux du formulaire"
+    },
+    {
+      "type": "image_picker",
+      "id": "logo_image",
+      "label": "Logo du formulaire",
+      "info": "Logo affiché dans la barre latérale."
+    },
+    {
+      "type": "text",
+      "id": "step1_heading",
+      "label": "Titre étape 1",
+      "default": "Mon Lowreka Score : La Mesure de l'Impact Low-Tech"
+    },
+    {
+      "type": "richtext",
+      "id": "step1_content",
+      "label": "Contenu étape 1",
+      "default": "<p>Bienvenue, cher(e) partenaire Low-Tech !</p><p>Vous innovez au quotidien pour un monde plus durable. Nous avons créé cet outil pour vous aider à mesurer concrètement l'impact de vos produits low-tech et à en démontrer la valeur.</p><p>Nous vous guiderons pas à pas. Êtes-vous prêt(e) à révéler le véritable potentiel de votre low-tech ?</p>"
+    }
+    // Vous pouvez ajouter d'autres paramètres ici pour rendre le formulaire plus configurable
+  ],
+  "presets": [
+    {
+      "name": "Formulaire Lowreka Score",
+      "category": "Formulaires"
+    }
+  ]
+}
+{% endschema %}

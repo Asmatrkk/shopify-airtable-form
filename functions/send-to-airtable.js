@@ -30,12 +30,8 @@ exports.handler = async (event) => {
 
     let requestBody;
     try {
-        // Le corps de la requête doit maintenant contenir { formData: ..., dynamicQuestions: ... }
         requestBody = JSON.parse(event.body);
-        // =========================================================================
-        // >>> DEBUG LOG 1 : Corps de la requête JSON reçu par la fonction Netlify <<<
         console.log('DEBUG SERVER: Corps de la requête JSON reçu par la fonction Netlify:', requestBody);
-        // =========================================================================
     } catch (error) {
         console.error('Erreur de parsing JSON du corps de la requête:', error);
         return {
@@ -45,11 +41,10 @@ exports.handler = async (event) => {
         };
     }
 
-    // --- RÉCUPÉRATION CORRECTE DES DONNÉES EN FONCTION DU NOUVEAU FORMAT ATTENDU ---
-    const formData = requestBody.formData;             // Les données du formulaire soumises
-    const dynamicQuestions = requestBody.dynamicQuestions; // Les définitions des questions dynamiques
+    // --- RÉCUPÉRATION CORRECTE DES DONNÉES ---
+    const formData = requestBody.formData;
+    const dynamicQuestions = requestBody.dynamicQuestions;
 
-    // Vérifications de base pour s'assurer que les données essentielles sont présentes
     if (!formData) {
         console.error('formData est manquant dans le corps de la requête.');
         return {
@@ -59,11 +54,8 @@ exports.handler = async (event) => {
         };
     }
     if (!dynamicQuestions || !Array.isArray(dynamicQuestions)) {
-        console.warn("dynamicQuestions n'est pas un tableau valide ou est manquant. Les réponses dynamiques ne pourront pas être liées à l'ID_questions.");
-        // Note: Nous ne retournons pas d'erreur 400 ici pour permettre la soumission même si les questions dynamiques ne peuvent pas être liées.
-        // Si la liaison est MANDATORY, changer en 400.
+        console.warn("dynamicQuestions n'est pas un tableau valide ou est manquant. Les réponses dynamiques ne pourront pas être liées à l'ID_questions ou utilisées pour le calcul EMTA.");
     }
-
 
     // Initialisation de la base Airtable
     const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
@@ -72,6 +64,17 @@ exports.handler = async (event) => {
     const supplierTableName = process.env.AIRTABLE_SUPPLIER_TABLE_NAME;
     const productTableName = process.env.AIRTABLE_PRODUCT_TABLE_NAME;
     const answersTableName = process.env.AIRTABLE_ANSWERS_TABLE_NAME;
+    const scoreTableName = process.env.AIRTABLE_SCORE_TABLE_NAME; // NOUVEAU: Nom de la table Score
+
+    // Vérification que le nom de la table Score est bien défini
+    if (!scoreTableName) {
+        console.error("AIRTABLE_SCORE_TABLE_NAME n'est pas défini dans les variables d'environnement.");
+        return {
+            statusCode: 500,
+            headers: headers,
+            body: JSON.stringify({ message: "Configuration manquante: AIRTABLE_SCORE_TABLE_NAME." }),
+        };
+    }
 
     try {
         // 1. Créer l'enregistrement Fournisseur
@@ -106,78 +109,81 @@ exports.handler = async (event) => {
         );
         console.log('Enregistrement Produit créé:', productRecord[0].id);
 
-        // 3. Traiter et enregistrer les réponses aux questions dynamiques
-        const answersToCreate = [];
-        
-        // Créer une map pour un accès rapide aux ID de question par 'indicateur_questions'
-        const questionIdLookupMap = new Map();
+        // --- NOUVEAU : Initialiser le score total pour les questions EmatA ---
+        let totalEmatA_Score = 0;
+        // --- FIN NOUVEAU ---
+
+        // Créer une map pour un accès rapide aux ID de question et aux définitions complètes
+        const questionLookupMap = new Map();
         if (dynamicQuestions && Array.isArray(dynamicQuestions)) {
             dynamicQuestions.forEach(q => {
-                if (q.indicateur_questions && q.id_question) {
-                    questionIdLookupMap.set(q.indicateur_questions, q.id_question);
+                if (q.indicateur_questions) { // Utilisez indicateur_questions comme clé
+                    questionLookupMap.set(q.indicateur_questions, q); // Stockez l'objet complet de la question
                 }
             });
         }
-        // =========================================================================
-        // >>> DEBUG LOG 2 : questionIdLookupMap après création <<<
-        console.log('DEBUG SERVER: questionIdLookupMap après création:', questionIdLookupMap);
-        // =========================================================================
+        console.log('DEBUG SERVER: questionLookupMap après création:', questionLookupMap);
+
+        const answersToCreate = [];
 
         // Parcourir toutes les données soumises par le formulaire
         for (const key in formData) {
-            // Ignorer les champs fixes déjà traités (Fournisseur, Produit, et timestamp si présent)
+            // Ignorer les champs fixes déjà traités (Fournisseur, Produit, etc.)
             if ([
                 'prenom_fournisseur', 'nom_fournisseur', 'email_fournisseur',
                 'entreprise_fournisseur', 'siret_fournisseur', 'nom_produit',
-                'description_produit', 'timestamp_soumission' // Ajoutez tous les autres champs "fixes" si nécessaire
+                'description_produit', 'timestamp_soumission'
             ].includes(key)) {
                 continue;
             }
 
-            const questionId = questionIdLookupMap.get(key); // Tente de trouver l'ID de la question
+            const questionDef = questionLookupMap.get(key); // Récupérer la définition complète de la question
             let answerValue = formData[key];
 
             // Gérer les réponses multiples (comme les checkboxes)
             if (Array.isArray(answerValue)) {
-                answerValue = answerValue.join(', '); // Convertit le tableau en une chaîne séparée par des virgules
+                answerValue = answerValue.join(', ');
             }
 
-            // Seulement créer une réponse si la valeur est non vide ET que nous avons un ID de question valide
-            if (answerValue !== undefined && answerValue !== null && String(answerValue).trim() !== '' && questionId) {
+            // --- NOUVELLE LOGIQUE POUR CALCULER LES EMATA EN TEMPS RÉEL DANS LA FONCTION ---
+            if (questionDef && questionDef.type_questions === 'EmatA') { // Vérifie si le type de question est 'EmatA'
+                const numericAnswer = parseFloat(answerValue);
+                const coefficient = parseFloat(questionDef.coeff_questions);
+
+                // S'assurer que la réponse et le coefficient sont des nombres valides avant de calculer
+                if (!isNaN(numericAnswer) && !isNaN(coefficient)) {
+                    const individualEmatAScore = numericAnswer * coefficient;
+                    totalEmatA_Score += individualEmatAScore; // Accumuler le score EmatA
+                    console.log(`DEBUG SERVER: Calcul EmatA pour ${key}: ${numericAnswer} * ${coefficient} = ${individualEmatAScore}. Total EmatA accumulé: ${totalEmatA_Score}`);
+                } else {
+                    console.warn(`DEBUG SERVER: Réponse non numérique ou coefficient invalide pour question EmatA "${key}": Réponse "${answerValue}", Coeff "${questionDef.coeff_questions}". Cette question n'a pas contribué au total EmatA.`);
+                }
+            }
+            // --- FIN DE LA NOUVELLE LOGIQUE POUR LES EMATA ---
+
+            // Seulement créer une réponse dans la table "Réponses" si la valeur est non vide ET que nous avons une définition de question valide
+            if (answerValue !== undefined && answerValue !== null && String(answerValue).trim() !== '' && questionDef && questionDef.id_question) {
                 answersToCreate.push({
                     fields: {
                         "ID_produit": [productRecord[0].id],  // Liaison à l'enregistrement Produit
-                        "ID_questions": [questionId],         // Liaison à l'enregistrement Question spécifique
-                        "Réponse": String(answerValue),       // Le texte de la réponse (assurez-vous que cette colonne existe et est de type "Single line text" ou "Long text" dans votre table Airtable "Answers")
+                        "ID_questions": [questionDef.id_question], // Liaison à l'enregistrement Question spécifique
+                        "Réponse": String(answerValue),       // Le texte de la réponse
                     }
                 });
             } else {
-                if (!questionId) {
-                    console.warn(`DEBUG SERVER: Aucun ID_question trouvé pour l'indicateur "${key}". La réponse "${answerValue}" ne sera pas liée à une question spécifique.`);
-                    // Si vous avez une colonne générique pour les réponses non-liées, vous pourriez l'ajouter ici:
-                    // if (answerValue !== undefined && answerValue !== null && String(answerValue).trim() !== '') {
-                    //     answersToCreate.push({
-                    //         fields: {
-                    //             "ID_produit": [productRecord[0].id],
-                    //             "Réponse_Générique": String(answerValue), // Exemple: ajoutez une colonne "Réponse_Générique" dans Airtable
-                    //             "Nom_Champ_Formulaire": key // Pour savoir de quel champ cela vient
-                    //         }
-                    //     });
-                    // }
+                if (!questionDef || !questionDef.id_question) {
+                    console.warn(`DEBUG SERVER: Aucun ID_question trouvé pour l'indicateur "${key}". La réponse "${answerValue}" ne sera pas liée à une question spécifique dans la table Réponses.`);
                 } else {
-                    console.warn(`DEBUG SERVER: Réponse vide ou invalide pour l'indicateur "${key}". Réponse non enregistrée pour cette question.`);
+                    console.warn(`DEBUG SERVER: Réponse vide ou invalide pour l'indicateur "${key}". Réponse non enregistrée pour cette question dans la table Réponses.`);
                 }
             }
         }
-        // =========================================================================
-        // >>> DEBUG LOG 3 : answersToCreate AVANT envoi à Airtable <<<
         console.log('DEBUG SERVER: answersToCreate AVANT envoi à Airtable:', answersToCreate);
-        // =========================================================================
 
+        // Envoyer les réponses dynamiques à Airtable
         if (answersToCreate.length > 0) {
             console.log(`DEBUG SERVER: Tentative de création de ${answersToCreate.length} réponses dans Airtable.`);
-            // Envoyer par lots si nécessaire
-            const batchSize = 10;
+            const batchSize = 10; // Limite de l'API Airtable pour les opérations en batch
             for (let i = 0; i < answersToCreate.length; i += batchSize) {
                 const batch = answersToCreate.slice(i, i + batchSize);
                 await base(answersTableName).create(batch, { typecast: true });
@@ -187,14 +193,32 @@ exports.handler = async (event) => {
             console.log('DEBUG SERVER: Aucune réponse dynamique à créer.');
         }
 
+        // --- NOUVEAU : Créer l'enregistrement Score avec le total EmatA ---
+        console.log(`DEBUG SERVER: Création de l'enregistrement Score pour le Produit ID ${productRecord[0].id} avec EmatA total: ${totalEmatA_Score}`);
+        const scoreRecord = await base(scoreTableName).create(
+            [
+                {
+                    fields: {
+                        "ID_produit": [productRecord[0].id], // Lier à l'enregistrement Produit créé précédemment
+                        "Emat": totalEmatA_Score,             // La somme calculée des scores EmatA
+                        // Ajoutez ici d'autres champs de score si vous en avez (ex: autres catégories)
+                    }
+                }
+            ],
+            { typecast: true }
+        );
+        console.log('Enregistrement Score créé:', scoreRecord[0].id);
+        // --- FIN NOUVEAU ---
+
         // Retourner une réponse de succès
         return {
             statusCode: 200,
             headers: headers,
             body: JSON.stringify({
-                message: 'Informations (Fournisseur, Produit, Réponses) envoyées avec succès !',
+                message: 'Informations (Fournisseur, Produit, Réponses, Score) envoyées avec succès !',
                 supplierId: supplierRecord[0].id,
                 productId: productRecord[0].id,
+                scoreId: scoreRecord[0].id, // Retourne l'ID du score aussi
             }),
         };
 

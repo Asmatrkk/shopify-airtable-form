@@ -1,0 +1,940 @@
+<div class="multi-step-form-wrapper">
+
+  <div class="form-sidebar">
+    <div class="logo">
+      <a href="#" id="reset-form-link" aria-label="Retour au début du questionnaire">
+        <img src="https://lowreka.com/cdn/shop/files/Logo_mouette_blanc_68db3e42-cba4-42f7-8360-c8c82e4a0ace.png?v=1744884585&width=600" alt="Lowreka Logo" style="width: 150px; height: auto;">
+      </a>
+    </div>
+  </div>
+
+  <div class="form-main-content">
+
+    <div class="form-progress-bar" id="form-progress-bar">
+    </div>
+
+    <form id="airtable-multi-step-form" class="shopify-form">
+
+      <div class="form-step active" data-step="1">
+        <h2>Mon Lowreka Score : La Mesure de l'Impact Low-Tech</h2>
+        <p>Bienvenue, cher(e) partenaire Low-Tech !</p>
+        <p>Vous innovez au quotidien pour un monde plus durable. Nous avons créé cet outil pour vous aider à mesurer concrètement l'impact de vos produits low-tech et à en démontrer la valeur.</p>
+        <p>Nous vous guiderons pas à pas. Êtes-vous prêt(e) à révéler le véritable potentiel de votre low-tech ?</p>
+        <button type="button" class="button next-step">SUIVANT</button>
+      </div>
+
+      <div class="form-step" data-step="2">
+        <div class="form-navigation">
+          <button type="button" class="arrow-button prev-step">←</button>
+          <h3>Étape 1 : Vos Informations et celles de votre Produit</h3>
+        </div>
+        <p>Veuillez renseigner les détails du fournisseur et du produit.</p>
+
+        <h4>Informations Fournisseur</h4>
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="prenom_fournisseur">Prénom du fournisseur</label>
+            <input type="text" id="prenom_fournisseur" name="prenom_fournisseur" required>
+            <div class="form-field-error-message"></div>
+          </div>
+          <div class="form-field">
+            <label for="nom_fournisseur">Nom du fournisseur</label>
+            <input type="text" id="nom_fournisseur" name="nom_fournisseur" required>
+            <div class="form-field-error-message"></div>
+          </div>
+          <div class="form-field">
+            <label for="email_fournisseur">Email du fournisseur</label>
+            <input type="email" id="email_fournisseur" name="email_fournisseur" required>
+            <div class="form-field-error-message"></div>
+          </div>
+          <div class="form-field">
+            <label for="entreprise_fournisseur">Entreprise du fournisseur</label>
+            <input type="text" id="entreprise_fournisseur" name="entreprise_fournisseur" required>
+            <div class="form-field-error-message"></div>
+          </div>
+          <div class="form-field">
+            <label for="siret_fournisseur">SIRET du fournisseur</label>
+            <input type="text" id="siret_fournisseur" name="siret_fournisseur">
+            <div class="form-field-error-message"></div>
+          </div>
+        </div>
+
+        <h4 style="margin-top: 30px;">Informations Produit</h4>
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="nom_produit">Nom du produit</label>
+            <input type="text" id="nom_produit" name="nom_produit" required>
+            <div class="form-field-error-message"></div>
+          </div>
+          <div class="form-field full-width">
+            <label for="description_produit">Description du produit</label>
+            <textarea id="description_produit" name="description_produit" rows="5" required></textarea>
+            <div class="form-field-error-message"></div>
+          </div>
+        </div>
+        <p id="step2-status" class="form-status"></p>
+        <button type="button" class="button next-step">SUIVANT</button>
+      </div>
+
+      <div id="dynamic-form-steps"></div>
+
+      <div class="form-step" data-step="final">
+        <div class="form-navigation">
+          <button type="button" class="arrow-button prev-step">←</button>
+          <h3>Confirmation et Envoi</h3>
+        </div>
+        <p>Veuillez vérifier les informations ci-dessous avant de soumettre.</p>
+
+        <div class="form-summary" id="form-summary">
+        </div>
+
+        <button type="submit" class="button">Envoyer le Formulaire</button>
+        <p id="form-status" style="margin-top: 10px;"></p>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<style>
+  /* Votre CSS existant ici. (inchangé) */
+  .multi-step-form-wrapper {
+    display: flex;
+    min-height: 600px;
+    background-color: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    margin: 40px auto;
+    max-width: 1000px;
+  }
+
+  .form-sidebar {
+    background-color: #2e7d70;
+    width: 250px;
+    padding: 30px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+  }
+
+  .form-sidebar .logo {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    width: 100%;
+  }
+
+  .form-sidebar .logo img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .form-sidebar .logo a {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    width: 100%;
+    cursor: pointer;
+  }
+
+
+  .form-main-content {
+    flex-grow: 1;
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-progress-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    width: 100%;
+    max-width: 350px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-top: 10px;
+  }
+
+  .form-progress-bar .step-wrapper {
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+  }
+
+  .form-progress-bar .step-wrapper:last-child {
+    flex-grow: 0;
+  }
+
+  .form-progress-bar .step {
+    width: 35px;
+    height: 35px;
+    background-color: #E0E0E0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #808080;
+    font-weight: bold;
+    font-size: 1.1em;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+  }
+
+  .form-progress-bar .step.active {
+    background-color: #2e7d70;
+    color: white;
+  }
+
+  .form-progress-bar .progress-segment {
+    height: 6px;
+    background-color: #E0E0E0;
+    flex-grow: 1;
+    border-radius: 3px;
+    margin: 0 5px;
+    transition: background-color 0.3s ease;
+  }
+
+  .form-progress-bar .progress-segment.active {
+    background-color: #2e7d70;
+  }
+
+  #airtable-multi-step-form {
+    flex-grow: 1;
+    padding-top: 0;
+  }
+
+  .form-step {
+    display: none;
+    padding-top: 20px;
+  }
+
+  .form-step.active {
+    display: block;
+  }
+
+  .form-navigation {
+    display: flex;
+    align-items: center;
+    margin-bottom: 30px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 15px;
+  }
+
+  .form-navigation h3 {
+    margin: 0;
+    margin-left: 15px;
+    font-size: 1.5em;
+    color: #333;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  @media (min-width: 768px) {
+    .form-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .form-field.full-width {
+      /* Nouveau style */
+      grid-column: span 2;
+      /* Fait occuper 2 colonnes */
+    }
+  }
+
+  .form-field {
+    margin-bottom: 0;
+  }
+
+  .form-field label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #555;
+    font-size: 0.9em;
+    text-transform: uppercase;
+  }
+
+  .form-field input[type="text"],
+  .form-field input[type="email"],
+  .form-field textarea,
+  .form-field select,
+  .form-field input[type="date"],
+  .form-field input[type="number"] {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-size: 16px;
+  }
+
+  .form-field.radio-group label,
+  .form-field.checkbox-group label {
+    display: inline-block;
+    font-weight: normal;
+    text-transform: none;
+    margin-bottom: 0;
+  }
+
+  .form-field.radio-group input[type="radio"],
+  .form-field.checkbox-group input[type="checkbox"] {
+    width: auto;
+    margin-right: 8px;
+  }
+
+
+  .form-field input:focus,
+  .form-field textarea:focus,
+  .form-field select:focus {
+    border-color: #2e7d70;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(46, 125, 112, 0.25);
+  }
+
+  .button {
+    background-color: #2e7d70;
+    color: white;
+    padding: 12px 30px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 17px;
+    font-weight: bold;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    margin-top: 30px;
+  }
+
+  .button:hover {
+    background-color: #236357;
+    transform: translateY(-2px);
+  }
+
+  .arrow-button {
+    background: none;
+    border: none;
+    font-size: 28px;
+    cursor: pointer;
+    color: #2e7d70;
+    padding: 5px;
+    transition: color 0.3s ease;
+  }
+
+  .arrow-button:hover {
+    color: #236357;
+  }
+
+  .form-status {
+    text-align: center;
+    padding: 12px;
+    border-radius: 5px;
+    font-weight: bold;
+    margin-top: 25px;
+    font-size: 1em;
+  }
+
+  .form-status.success {
+    background-color: #e6ffe6;
+    color: #28a745;
+    border: 1px solid #a8e8a8;
+  }
+
+  .form-status.error {
+    background-color: #ffe6e6;
+    color: #dc3545;
+    border: 1px solid #e8a8a8;
+  }
+
+  .form-summary p {
+    margin-bottom: 12px;
+    font-size: 1.1em;
+    line-height: 1.6;
+  }
+
+  .form-summary strong {
+    color: #333;
+    display: inline-block;
+    min-width: 150px;
+  }
+
+  .is-invalid {
+    border-color: #dc3545 !important;
+  }
+
+  .form-field-error-message {
+    color: #dc3545;
+    font-size: 0.85em;
+    margin-top: 5px;
+  }
+</style>
+{% raw %}
+<script>
+  document.addEventListener('DOMContentLoaded', async () => {
+    const form = document.getElementById('airtable-multi-step-form');
+    let formSteps = Array.from(form.querySelectorAll('.form-step'));
+    const dynamicFormStepsContainer = document.getElementById('dynamic-form-steps');
+    const formProgressBar = document.getElementById('form-progress-bar');
+    let formProgressBarSteps;
+    let progressSegments;
+    const resetFormLink = document.getElementById('reset-form-link');
+    const formStatusMain = document.getElementById('form-status');
+
+    let currentStepIndex = 0;
+    const formDataCollected = {};
+    const dynamicQuestionsData = []; // Ce tableau contiendra les questions du backend
+    // const questionIdMap = new Map(); // Cette map n'est pas utilisée directement dans le client pour la logique d'envoi, mais peut être utile pour d'autres traitements si besoin.
+
+    // Vérifiez que ces URLs sont correctes et accessibles. Utilisez votre domaine Netlify.
+    const getQuestionsNetlifyUrl = 'https://lowreka.netlify.app/.netlify/functions/get-form-questions';
+    const sendFormDataNetlifyUrl = 'https://lowreka.netlify.app/.netlify/functions/send-to-airtable';
+
+    // Fonction initializeForm, restaurée et ajustée
+    async function initializeForm() {
+      try {
+        const response = await fetch(getQuestionsNetlifyUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const questionsFromServer = await response.json(); // Récupère le tableau de questions déjà mappées
+        console.log('Données des questions reçues du serveur:', questionsFromServer); // TRÈS IMPORTANT pour vérifier
+
+        if (Array.isArray(questionsFromServer)) {
+          dynamicQuestionsData.length = 0; // Vider les données existantes
+
+          // Mettre à jour dynamicQuestionsData avec les données du serveur
+          questionsFromServer.forEach(q => {
+            // Créer un objet question pour le frontend, en s'assurant que les propriétés essentielles sont présentes
+            const question = {
+              id_question: q.id_question,
+              etape: q.etape,
+              indicateur_questions: q.indicateur_questions,
+              titre: q.titre, // Anciennement question_texte
+              type_questions: q.type_questions, // Anciennement type_question
+              coeff_questions: q.coeff_questions || 0,
+              categorie_questions: q.categorie_questions || '',
+
+              // Assurez-vous que ces champs sont renvoyés par votre fonction Netlify 'get-form-questions'
+              // Sinon, ils utiliseront les valeurs par défaut et le formulaire ne fonctionnera pas comme prévu
+              options: q.options ? q.options.split(',').map(opt => opt.trim()) : [], // S'attend à une chaîne CSV
+              description: q.description || '', // Assurez-vous que la description est un champ dans Airtable et renvoyé
+              obligatoire: q.obligatoire === true, // Utilise la propriété 'obligatoire' qui doit être un booléen
+              ordre: q.ordre || 0 // Si vous avez un champ 'ordre' pour trier les questions dans une étape
+            };
+
+            // Vérifier si la question a les champs essentiels pour être affichée
+            if (question.id_question && question.titre && question.indicateur_questions && question.type_questions && question.etape !== undefined) {
+              dynamicQuestionsData.push(question);
+              // questionIdMap.set(question.id_question, question); // Pas nécessaire pour l'envoi, mais pour le suivi local
+            } else {
+              console.warn("Question ignorée car des champs essentiels sont manquants ou indéfinis:", q);
+            }
+          });
+
+          // Trier les questions par étape puis par ordre (si l'ordre est défini)
+          dynamicQuestionsData.sort((a, b) => {
+            if (a.etape !== b.etape) {
+              return parseInt(a.etape) - parseInt(b.etape);
+            }
+            return (a.ordre || 0) - (b.ordre || 0);
+          });
+
+          console.log('Questions traitées pour le formulaire (triées et complétées):', dynamicQuestionsData); 
+
+          renderDynamicSteps(); // Rendre les étapes après le chargement et le tri des questions
+        } else {
+          console.error("Structure de données inattendue du serveur:", questionsFromServer);
+          formStatusMain.textContent = 'Erreur: Structure de données inattendue reçue du serveur.';
+          formStatusMain.className = 'form-status error';
+        }
+
+      } catch (error) {
+        console.error('Erreur lors du chargement des questions:', error);
+        formStatusMain.textContent = 'Erreur: Impossible de charger les questions du formulaire. Veuillez réessayer plus tard.';
+        formStatusMain.className = 'form-status error';
+      }
+    }
+
+    // Fonction pour générer le HTML d'un champ de formulaire individuel
+    function generateInputField(question) {
+      let inputHtml = '';
+      const name = question.indicateur_questions;
+      const id = `question-${question.id_question}`;
+      // Utilisation de 'obligatoire' qui est maintenant correctement mappé depuis le serveur
+      const requiredAttr = question.obligatoire ? 'required' : '';
+
+      // Conteneur pour les messages d'erreur spécifiques à chaque champ
+      const errorHtml = '<div class="form-field-error-message"></div>';
+
+      switch (question.type_questions) { // Assurez-vous que 'type_questions' correspond aux noms de types d'Airtable
+        case 'singleLineText':
+        case 'email':
+        case 'number':
+          const inputType = question.type_questions === 'number' ? 'number' : (question.type_questions === 'email' ? 'email' : 'text');
+          inputHtml = `<input type="${inputType}" id="${id}" name="${name}" ${requiredAttr}>`;
+          break;
+        case 'multilineText':
+          inputHtml = `<textarea id="${id}" name="${name}" rows="5" ${requiredAttr}></textarea>`;
+          break;
+        case 'singleSelect':
+        case 'radio':
+          inputHtml = `<div class="${question.type_questions}-group">`;
+          if (question.options && question.options.length > 0) {
+            question.options.forEach(option => {
+              const optionId = `${id}-${option.replace(/\s+/g, '-').toLowerCase()}`;
+              inputHtml += `
+                <input type="radio" id="${optionId}" name="${name}" value="${option}" ${requiredAttr}>
+                <label for="${optionId}">${option}</label><br>
+              `;
+            });
+          } else {
+            console.warn(`Type '${question.type_questions}' nécessite des options, mais aucune n'est fournie pour la question: ${question.titre}.`);
+            inputHtml += `<p style="color:red;">Options manquantes pour cette question.</p>`;
+          }
+          inputHtml += `</div>`;
+          break;
+        case 'checkbox':
+          inputHtml = `<div class="checkbox-group">`;
+          if (question.options && question.options.length > 0) {
+            question.options.forEach(option => {
+              const optionId = `${id}-${option.replace(/\s+/g, '-').toLowerCase()}`;
+              inputHtml += `
+                <input type="checkbox" id="${optionId}" name="${name}" value="${option}" ${requiredAttr}>
+                <label for="${optionId}">${option}</label><br>
+              `;
+            });
+          } else {
+            console.warn(`Type '${question.type_questions}' nécessite des options, mais aucune n'est fournie pour la question: ${question.titre}.`);
+             // Si pas d'options explicites pour une checkbox, on peut considérer une checkbox simple "Oui"
+            inputHtml += `
+                <input type="checkbox" id="${id}" name="${name}" value="Oui" ${requiredAttr}>
+                <label for="${id}">Oui</label>
+            `;
+          }
+          inputHtml += `</div>`;
+          break;
+        case 'date':
+          inputHtml = `<input type="date" id="${id}" name="${name}" ${requiredAttr}>`;
+          break;
+        default:
+          console.warn(`Type de question non géré: ${question.type_questions} pour la question: ${question.titre}`);
+          inputHtml = `<input type="text" id="${id}" name="${name}" ${requiredAttr} placeholder="Type non géré">`;
+      }
+
+      return `
+        <div class="form-field ${question.type_questions === 'multilineText' ? 'full-width' : ''}">
+          <label for="${id}">${question.titre}</label>
+          ${question.description ? `<p class="question-description">${question.description}</p>` : ''}
+          ${inputHtml}
+          ${errorHtml}
+        </div>
+      `;
+    }
+
+    // Fonction pour rendre les étapes dynamiques du formulaire
+    function renderDynamicSteps() {
+      const stepsByStage = {};
+      // Regrouper les questions par leur numéro d'étape ('etape')
+      dynamicQuestionsData.forEach(q => {
+        const etape = q.etape; 
+        if (!stepsByStage[etape]) {
+          stepsByStage[etape] = [];
+        }
+        stepsByStage[etape].push(q);
+      });
+
+      // Trier les étapes (stages) numériquement
+      const sortedStages = Object.keys(stepsByStage).sort((a, b) => parseInt(a) - parseInt(b));
+
+      // Commencer après l'étape d'introduction (data-step="1") et l'étape Fournisseur/Produit (data-step="2")
+      let currentVisualStepNumber = 2; 
+
+      dynamicFormStepsContainer.innerHTML = ''; // Nettoyer le conteneur des étapes dynamiques
+      sortedStages.forEach(stageNum => {
+        // Trier les questions au sein d'une étape par 'ordre'
+        const stageQuestions = stepsByStage[stageNum].sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+
+        const stepDiv = document.createElement('div');
+        stepDiv.classList.add('form-step');
+        stepDiv.dataset.step = ++currentVisualStepNumber; // Incrémente le numéro d'étape visuel
+
+        stepDiv.innerHTML = `
+          <div class="form-navigation">
+            <button type="button" class="arrow-button prev-step">←</button>
+            <h3>Étape ${currentVisualStepNumber - 1} : Questions sur l'impact</h3>
+          </div>
+          <div class="form-grid">
+            ${stageQuestions.map(q => generateInputField(q)).join('')}
+          </div>
+          <p id="step${stepDiv.dataset.step}-status" class="form-status"></p>
+          <button type="button" class="button next-step">SUIVANT</button>
+        `;
+        dynamicFormStepsContainer.appendChild(stepDiv);
+      });
+      // Après avoir rendu les étapes dynamiques, rafraîchir la liste complète des étapes du formulaire
+      formSteps = Array.from(form.querySelectorAll('.form-step'));
+      generateProgressBar(); // Régénérer la barre de progression avec toutes les étapes
+      updateButtons(); // Ré-attacher les écouteurs d'événements aux nouveaux boutons
+    }
+
+    // Affiche l'étape du formulaire spécifiée par son index
+    function showStep(stepIndex) {
+      formSteps.forEach((step, index) => {
+        if (index === stepIndex) {
+          step.classList.add('active');
+        } else {
+          step.classList.remove('active');
+        }
+      });
+      updateProgressBar(stepIndex);
+      currentStepIndex = stepIndex;
+      // Scrolle la vue vers le haut du formulaire pour la nouvelle étape
+      form.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    }
+
+    // Met à jour l'affichage de la barre de progression
+    function updateProgressBar(stepIndex) {
+      formProgressBarSteps.forEach((stepEl, index) => {
+        if (index <= stepIndex) {
+          stepEl.classList.add('active');
+        } else {
+          stepEl.classList.remove('active');
+        }
+      });
+
+      progressSegments.forEach((segmentEl, index) => {
+        if (index < stepIndex) {
+          segmentEl.classList.add('active');
+        } else {
+          segmentEl.classList.remove('active');
+        }
+      });
+    }
+
+    // Valide les champs de l'étape actuelle
+    function validateStep(stepIndex) {
+      const currentFormStep = formSteps[stepIndex];
+      // Les étapes 0 (intro) et finale n'ont pas de validation de champ direct
+      if (stepIndex === 0 || currentFormStep.dataset.step === 'final') {
+        return true;
+      }
+
+      const inputs = currentFormStep.querySelectorAll('input[required], textarea[required], select[required]');
+      let isValid = true;
+
+      // Effacer tous les messages d'erreur et styles d'erreur de l'étape actuelle
+      currentFormStep.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+      currentFormStep.querySelectorAll('.form-field-error-message').forEach(el => el.textContent = '');
+
+      inputs.forEach(input => {
+        const fieldContainer = input.closest('.form-field');
+        const errorMessageEl = fieldContainer ? fieldContainer.querySelector('.form-field-error-message') : null;
+
+        let fieldValid = true;
+        let fieldErrorMessage = '';
+
+        // Validation de base pour les champs texte, email, number, textarea, select
+        if (input.type !== 'radio' && input.type !== 'checkbox') {
+          if (!input.value.trim()) {
+            fieldValid = false;
+            fieldErrorMessage = 'Ce champ est requis.';
+          } else if (input.type === 'email' && !/^[^@]+@[^@]+\.[^@]+$/.test(input.value)) {
+            fieldValid = false;
+            fieldErrorMessage = 'Veuillez entrer une adresse email valide.';
+          } else if (input.name === 'siret_fournisseur' && input.value.trim() && !/^[0-9]{14}$/.test(input.value)) {
+            fieldValid = false;
+            fieldErrorMessage = 'Le numéro SIRET doit contenir 14 chiffres.';
+          }
+        }
+
+        // Validation pour les groupes radio et checkbox
+        // Cette validation s'applique si l'attribut 'required' est présent sur les inputs du groupe
+        if ((input.type === 'radio' || input.type === 'checkbox') && input.required) {
+          const groupName = input.name;
+          const groupInputs = currentFormStep.querySelectorAll(`input[name="${groupName}"]`);
+          const isGroupChecked = Array.from(groupInputs).some(item => item.checked);
+
+          if (!isGroupChecked) {
+            fieldValid = false;
+            fieldErrorMessage = 'Veuillez sélectionner au moins une option.';
+            // Appliquer is-invalid à toutes les inputs du groupe pour visuel
+            groupInputs.forEach(el => el.classList.add('is-invalid'));
+          } else {
+            // Retirer is-invalid de toutes les inputs du groupe si valide
+            groupInputs.forEach(el => el.classList.remove('is-invalid'));
+          }
+        }
+
+        if (!fieldValid) {
+          isValid = false;
+          if (errorMessageEl) {
+            errorMessageEl.textContent = fieldErrorMessage;
+          }
+          // Appliquer is-invalid au champ si ce n'est pas un groupe radio/checkbox
+          if (input.type !== 'radio' && input.type !== 'checkbox') {
+            input.classList.add('is-invalid');
+          }
+        } else {
+          // S'assurer de retirer la classe is-invalid si le champ est valide
+          if (input.type !== 'radio' && input.type !== 'checkbox') {
+            input.classList.remove('is-invalid');
+          }
+        }
+      });
+
+      // Mise à jour du message de statut global de l'étape
+      const stepStatusElement = currentFormStep.querySelector('.form-status');
+      if (stepStatusElement) {
+        if (!isValid) {
+          stepStatusElement.textContent = 'Veuillez corriger les erreurs dans les champs requis.';
+          stepStatusElement.className = 'form-status error';
+        } else {
+          stepStatusElement.textContent = '';
+          stepStatusElement.className = '';
+        }
+      }
+      return isValid;
+    }
+
+    // Collecte les données de l'étape actuelle et les ajoute à formDataCollected
+    function collectDataForStep(stepIndex) {
+      const currentFormStep = formSteps[stepIndex];
+      const inputs = currentFormStep.querySelectorAll('input, textarea, select');
+
+      // 1. Initialiser/Vider les tableaux pour les groupes de checkboxes UNIQUEMENT pour l'étape actuelle
+      // On utilise un Set pour stocker les noms de groupes de checkboxes uniques
+      const checkboxGroupNamesInStep = new Set();
+      inputs.forEach(input => {
+        if (input.type === 'checkbox' && input.name) {
+          checkboxGroupNamesInStep.add(input.name);
+        }
+      });
+      // Pour chaque nom de groupe de checkbox identifié dans cette étape, vider son tableau dans formDataCollected
+      checkboxGroupNamesInStep.forEach(name => {
+        formDataCollected[name] = [];
+      });
+
+      // 2. Parcourir et collecter les valeurs
+      inputs.forEach(input => {
+        // Ignorer les champs sans nom ou les boutons de soumission/navigation
+        if (!input.name || input.type === 'submit' || input.type === 'button') {
+          return;
+        }
+
+        if (input.type === 'radio') {
+          if (input.checked) {
+            formDataCollected[input.name] = input.value.trim();
+          }
+        } else if (input.type === 'checkbox') {
+          if (input.checked) {
+            // Pousser la valeur dans le tableau. Le tableau a été initialisé/vidé plus haut.
+            if (!formDataCollected[input.name]) { // Fallback (ne devrait pas être nécessaire avec la logique précédente)
+              formDataCollected[input.name] = [];
+            }
+            formDataCollected[input.name].push(input.value.trim());
+          }
+        } else {
+          // Pour tous les autres types (text, email, number, textarea, select)
+          formDataCollected[input.name] = input.value.trim();
+        }
+      });
+      console.log('formDataCollected après collecte de l\'étape:', formDataCollected); // Pour débogage
+    }
+
+    // Génère le résumé des données collectées avant la soumission finale
+    function generateSummary() {
+      const formSummary = document.getElementById('form-summary');
+      if (!formSummary) {
+          console.error("L'élément 'form-summary' n'est pas trouvé. Le résumé ne peut pas être généré.");
+          return;
+      }
+      let summaryHTML = '';
+
+      summaryHTML += `<h4>Informations Fournisseur</h4>`;
+      if (formDataCollected.prenom_fournisseur) summaryHTML += `<p><strong>Prénom:</strong> ${formDataCollected.prenom_fournisseur}</p>`;
+      if (formDataCollected.nom_fournisseur) summaryHTML += `<p><strong>Nom:</strong> ${formDataCollected.nom_fournisseur}</p>`;
+      if (formDataCollected.email_fournisseur) summaryHTML += `<p><strong>Email:</strong> ${formDataCollected.email_fournisseur}</p>`;
+      if (formDataCollected.entreprise_fournisseur) summaryHTML += `<p><strong>Entreprise:</strong> ${formDataCollected.entreprise_fournisseur}</p>`;
+      if (formDataCollected.siret_fournisseur) summaryHTML += `<p><strong>SIRET:</strong> ${formDataCollected.siret_fournisseur}</p>`;
+
+      summaryHTML += `<h4 style="margin-top: 20px;">Informations Produit</h4>`;
+      if (formDataCollected.nom_produit) summaryHTML += `<p><strong>Nom du produit:</strong> ${formDataCollected.nom_produit}</p>`;
+      if (formDataCollected.description_produit) summaryHTML += `<p><strong>Description du produit:</strong> ${formDataCollected.description_produit}</p>`;
+
+      summaryHTML += `<h4 style="margin-top: 20px;">Questions Dynamiques</h4>`;
+      // Utilise dynamicQuestionsData pour l'ordre et le titre des questions dans le résumé
+      dynamicQuestionsData.forEach(question => {
+        const answerKey = question.indicateur_questions; // Clé utilisée dans formDataCollected
+        let answerValue = formDataCollected[answerKey];
+
+        if (answerValue === undefined || answerValue === null || answerValue === '') {
+          answerValue = "Non renseigné";
+        } else if (Array.isArray(answerValue)) {
+          answerValue = answerValue.join(', '); // Concaténer les réponses de checkbox
+        }
+
+        summaryHTML += `<p><strong>${question.titre}:</strong> ${answerValue}</p>`;
+      });
+
+      formSummary.innerHTML = summaryHTML;
+    }
+
+    // Génère la barre de progression du formulaire
+    function generateProgressBar() {
+      if (!formProgressBar) {
+          console.error("L'élément 'form-progress-bar' n'est pas trouvé. La barre de progression ne peut pas être générée.");
+          return;
+      }
+      formProgressBar.innerHTML = '';
+      // Utiliser formSteps.length pour obtenir le nombre total d'étapes (fixes + dynamiques)
+      const totalVisualSteps = formSteps.length;
+
+      for (let i = 0; i < totalVisualSteps; i++) {
+        const stepWrapper = document.createElement('div');
+        stepWrapper.classList.add('step-wrapper');
+
+        const stepDiv = document.createElement('div');
+        stepDiv.classList.add('step');
+        stepDiv.dataset.step = i + 1; // Numéro d'étape visuel
+        stepDiv.textContent = i + 1;
+        stepWrapper.appendChild(stepDiv);
+
+        if (i < totalVisualSteps - 1) {
+          const segmentDiv = document.createElement('div');
+          segmentDiv.classList.add('progress-segment');
+          segmentDiv.dataset.segment = i + 1;
+          stepWrapper.appendChild(segmentDiv);
+        }
+        formProgressBar.appendChild(stepWrapper);
+      }
+      formProgressBarSteps = formProgressBar.querySelectorAll('.step');
+      progressSegments = formProgressBar.querySelectorAll('.progress-segment');
+    }
+
+    // Met à jour les écouteurs d'événements pour les boutons de navigation (précédent/suivant)
+    function updateButtons() {
+      // Supprimer tous les écouteurs existants pour éviter les duplications (important après renderDynamicSteps)
+      form.querySelectorAll('.next-step').forEach(button => button.removeEventListener('click', handleNextClick));
+      form.querySelectorAll('.prev-step').forEach(button => button.removeEventListener('click', handlePrevClick));
+
+      // Ré-attacher les écouteurs d'événements
+      form.querySelectorAll('.next-step').forEach(button => {
+        button.addEventListener('click', handleNextClick);
+      });
+      form.querySelectorAll('.prev-step').forEach(button => {
+        button.addEventListener('click', handlePrevClick);
+      });
+    }
+
+    // Gère le clic sur le bouton "SUIVANT"
+    function handleNextClick() {
+      if (validateStep(currentStepIndex)) { // Valide l'étape actuelle
+        collectDataForStep(currentStepIndex); // Collecte les données de l'étape actuelle AVANT de passer à la suivante
+
+        if (currentStepIndex + 1 < formSteps.length) {
+          showStep(currentStepIndex + 1); // Passe à l'étape suivante
+          // Si on passe à l'étape finale (le résumé), générer le résumé
+          if (formSteps[currentStepIndex].dataset.step === 'final') { // Vérifie l'étape *après* l'incrémentation
+            generateSummary();
+          }
+        }
+      }
+    }
+
+    // Gère le clic sur le bouton "PRÉCÉDENT"
+    function handlePrevClick() {
+      if (currentStepIndex > 0) {
+        showStep(currentStepIndex - 1); // Revient à l'étape précédente
+      }
+    }
+
+    // Gère le clic sur le lien de réinitialisation du formulaire
+    resetFormLink.addEventListener('click', (event) => {
+      event.preventDefault();
+      form.reset(); // Réinitialise les valeurs des champs HTML
+
+      // Réinitialise l'objet formDataCollected
+      for (const key in formDataCollected) {
+        delete formDataCollected[key];
+      }
+      // Efface les messages de statut globaux et de chaque étape
+      formStatusMain.textContent = '';
+      formStatusMain.className = '';
+      formSteps.forEach(step => {
+        const statusElement = step.querySelector('.form-status');
+        if (statusElement) {
+          statusElement.textContent = '';
+          statusElement.className = '';
+        }
+        // Retirer les classes 'is-invalid' et les messages d'erreur des champs
+        step.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        step.querySelectorAll('.form-field-error-message').forEach(el => el.textContent = '');
+      });
+      showStep(0); // Retourne à la première étape
+    });
+
+    // Gère la soumission finale du formulaire
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault(); // Empêche le comportement par défaut
+
+      formStatusMain.textContent = 'Envoi en cours...';
+      formStatusMain.className = 'form-status';
+
+    console.log('DEBUG CLIENT: Final formDataCollected being sent:', formDataCollected);
+    console.log('DEBUG CLIENT: Final dynamicQuestionsData being sent:', dynamicQuestionsData);
+
+      try {
+        const response = await fetch(sendFormDataNetlifyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          // --- MODIFICATION CRUCIALE ICI : ENVOI DE formData ET dynamicQuestions ---
+          body: JSON.stringify({ 
+            formData: formDataCollected, 
+            dynamicQuestions: dynamicQuestionsData 
+          }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          formStatusMain.textContent = 'Formulaire soumis avec succès !';
+          formStatusMain.className = 'form-status success';
+          form.reset(); // Réinitialiser le formulaire après succès
+          // Réinitialiser l'objet formDataCollected après soumission réussie
+          for (const key in formDataCollected) {
+            delete formDataCollected[key];
+          }
+          // Optionnel: revenir à la première étape ou afficher un message de remerciement final plus élaboré
+          // setTimeout(() => showStep(0), 3000); // Ex: revenir à la première étape après 3 secondes
+        } else {
+          formStatusMain.textContent = `Erreur lors de la soumission: ${result.message || 'Une erreur inconnue est survenue.'}`;
+          formStatusMain.className = 'form-status error';
+        }
+      } catch (error) {
+        console.error('Erreur réseau ou inattendue lors de la soumission:', error);
+        formStatusMain.textContent = `Erreur: Impossible de communiquer avec le serveur. ${error.message}`;
+        formStatusMain.className = 'form-status error';
+      }
+    });
+
+    // Initialisation du formulaire au chargement de la page
+    await initializeForm(); // Lance le chargement des questions et la construction des étapes dynamiques
+    showStep(0); // Affiche la toute première étape (l'intro)
+  });
+</script>
+{% endraw %}
