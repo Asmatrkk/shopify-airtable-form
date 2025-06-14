@@ -183,7 +183,7 @@ exports.handler = async (event) => {
             // --- NOUVELLE LOGIQUE POUR CALCULER LES EMATA EN TEMPS RÉEL DANS LA FONCTION ---
             if (questionDef && questionDef.categorie_questions === 'EmatA') { // Vérifie si le type de question est 'EmatA' ( on est tjr dans la boucle for )
                 const numericAnswer = parseFloat(answerValue);
-                const coefficient = parseFloat(questionDef.coeff_questions);
+                const coefficient = parseFloat(questionDef.coef_questions);
 
                 // S'assurer que la réponse et le coefficient sont des nombres valides avant de calculer
                 if (!isNaN(numericAnswer) && !isNaN(coefficient)) {
