@@ -41,7 +41,7 @@ exports.handler = async (event) => {
             indicateur_questions: record.get('indicateur_questions'),
             titre: record.get('Titre_questions'),
             type_questions: record.get('type_questions'),
-            coeff_questions: record.get('coef_questions') || 0,
+            coeff_questions: record.get('coef_questions'),
             categorie_questions: record.get('categorie_questions') || ''
         }));
 
