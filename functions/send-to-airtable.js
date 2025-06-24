@@ -147,6 +147,8 @@ exports.handler = async (event) => {
       
         // Initialisation du score total pour les questions Emat A
         let totalEmatA_Score = 0;
+        let productA_Mass = null; 
+        let productB_Mass = null; 
 
         // Création d'une Map pour stocker les définitions complètes des questions pour un accès rapide (questionLookupMap.get(key)) avec key = l'indicateur_questions
         const questionLookupMap = new Map();
@@ -178,6 +180,24 @@ exports.handler = async (event) => {
             // Gérer les réponses multiples (comme les checkboxes)
             if (Array.isArray(answerValue)) {
                 answerValue = answerValue.join(', ');
+            }
+
+
+            // -------- Récuperation de la masse A et B dans la table score --------
+
+            if (key === 'MasseA') { // Indicateur pour la masse du produit A
+                productA_Mass = parseFloat(answerValue);
+                if (isNaN(productA_Mass)) {
+                    console.warn(`DEBUG SERVER: Masse du produit A ("${answerValue}") n'est pas un nombre valide. Stockée telle quelle.`);
+                    productA_Mass = answerValue;
+                }
+            }
+            if (key === 'MasseB') { // Indicateur pour la masse du produit B
+                productB_Mass = parseFloat(answerValue);
+                if (isNaN(productB_Mass)) {
+                    console.warn(`DEBUG SERVER: Masse du produit B ("${answerValue}") n'est pas un nombre valide. Stockée telle quelle.`);
+                    productB_Mass = answerValue;
+                }
             }
 
             // --- NOUVELLE LOGIQUE POUR CALCULER LES EMATA EN TEMPS RÉEL DANS LA FONCTION ---
@@ -235,6 +255,8 @@ exports.handler = async (event) => {
                     fields: {
                         "ID_produit": [productRecord[0].id], // Lier à l'enregistrement Produit créé précédemment
                         "EmatA": totalEmatA_Score,             // La somme calculée des scores EmatA
+                        "MasseA": productA_Mass, // <-- Champ pour Masse A
+                        "MasseB": productB_Mass  // <-- Champ pour Masse B
                     }
                 }
             ],
