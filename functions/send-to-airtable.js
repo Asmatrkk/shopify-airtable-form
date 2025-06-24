@@ -270,6 +270,7 @@ exports.handler = async (event) => {
                     fields: {
                         "ID_produit": [productRecord[0].id], // Lier à l'enregistrement Produit créé précédemment
                         "EmatA": totalEmatA_Score,             // La somme calculée des scores EmatA
+                        "EmatB": totalEmatB_Score,             // La somme calculée des scores EmatA
                         "MasseA": productA_Mass, // <-- Champ pour Masse A
                         "MasseB": productB_Mass  // <-- Champ pour Masse B
                     }
