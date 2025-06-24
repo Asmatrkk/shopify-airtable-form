@@ -147,6 +147,7 @@ exports.handler = async (event) => {
       
         // Initialisation du score total pour les questions Emat A
         let totalEmatA_Score = 0;
+        let totalEmatB_Score = 0;
         let productA_Mass = null; 
         let productB_Mass = null; 
 
@@ -212,6 +213,20 @@ exports.handler = async (event) => {
                     console.log(`DEBUG SERVER: Calcul EmatA pour ${key}: ${numericAnswer} * ${coefficient} = ${individualEmatAScore}. Total EmatA accumulé: ${totalEmatA_Score}`);
                 } else {
                     console.warn(`DEBUG SERVER: Réponse non numérique ou coefficient invalide pour question EmatA "${key}": Réponse "${answerValue}", Coeff "${questionDef.coeff_questions}". Cette question n'a pas contribué au total EmatA.`);
+                }
+            }
+
+             // --- NOUVELLE LOGIQUE : Calculer les EmatB ---
+
+            if (questionDef && questionDef.categorie_questions === 'EmatB') { 
+                const numericAnswer = parseFloat(answerValue);
+                const coefficient = parseFloat(questionDef.coeff_questions);
+                if (!isNaN(numericAnswer) && !isNaN(coefficient)) {
+                    const individualEmatBScore = numericAnswer * coefficient;
+                    totalEmatB_Score += individualEmatBScore; 
+                    console.log(`DEBUG SERVER: Calcul EmatB pour ${key}: ${numericAnswer} * ${coefficient} = ${individualEmatBScore}. Total EmatB accumulé: ${totalEmatB_Score}`);
+                } else {
+                    console.warn(`DEBUG SERVER: Réponse non numérique ou coefficient invalide pour question EmatB "${key}": Réponse "${answerValue}", Coeff "${questionDef.coeff_questions}". Cette question n'a pas contribué au total EmatB.`);
                 }
             }
 
