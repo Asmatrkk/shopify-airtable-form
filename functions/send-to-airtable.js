@@ -492,17 +492,19 @@ async function ensureAirtableFieldsExist(base, bddProductsTableName, baseId, dat
             }
         }
 
-        if (fieldsToCreate.length > 0) {
-            console.log(`DEBUG SERVER: Tentative de création de ${fieldsToCreate.length} nouveaux champs dans la table "${bddProductsTableName}".`);
-            const createFieldsUrl = `https://api.airtable.com/v0/meta/bases/${baseId}/tables/${bddTable.id}/fields`;
-            const createFieldsResponse = await fetch(createFieldsUrl, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ fields: fieldsToCreate }),
-            });
+        
+            if (fieldsToCreate.length > 0) {
+        console.log(`DEBUG SERVER: Tentative de création de ${fieldsToCreate.length} nouveaux champs dans la table "${bddProductsTableName}".`);
+        console.log('DEBUG SERVER: Détails des champs à créer :', JSON.stringify(fieldsToCreate, null, 2)); 
+        const createFieldsUrl = `https://api.airtable.com/v0/meta/bases/${baseId}/tables/${bddTable.id}/fields`;
+        const createFieldsResponse = await fetch(createFieldsUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ fields: fieldsToCreate }),
+        });
 
             const createFieldsResult = await createFieldsResponse.json();
 
