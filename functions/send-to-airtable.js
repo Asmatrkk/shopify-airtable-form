@@ -592,6 +592,7 @@ exports.handler = async (event) => {
                 scoreId: scoreId,
                 totalUsageCostA: totalUsageCostA,
                 totalUsageCostB: totalUsageCostB,
+                
             }),
         };
 
