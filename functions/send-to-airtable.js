@@ -96,12 +96,12 @@ function getAirtableTableNames() {
     const supplierTableName = process.env.AIRTABLE_SUPPLIER_TABLE_NAME;
     const productTableName = process.env.AIRTABLE_PRODUCT_TABLE_NAME;
     const answersTableName = process.env.AIRTABLE_ANSWERS_TABLE_NAME;
-    // const scoreTableName = process.env.AIRTABLE_SCORE_TABLE_NAME; // Supprimé
+    const scoreTableName = process.env.AIRTABLE_SCORE_TABLE_NAME; // Réactivé
 
-    if (!supplierTableName || !productTableName || !answersTableName /* || !scoreTableName */) {
-        throw new Error("Un ou plusieurs noms de tables Airtable (Supplier, Product, Answers) sont manquants dans les variables d'environnement.");
+    if (!supplierTableName || !productTableName || !answersTableName || !scoreTableName) {
+        throw new Error("Un ou plusieurs noms de tables Airtable (Supplier, Product, Answers, Score) sont manquants dans les variables d'environnement.");
     }
-    return { supplierTableName, productTableName, answersTableName /* , scoreTableName */ };
+    return { supplierTableName, productTableName, answersTableName, scoreTableName };
 }
 
 /**
@@ -152,22 +152,21 @@ async function createProductRecord(base, tableName, formData, supplierId) {
 }
 
 /**
- * Traite les réponses dynamiques et prépare les enregistrements pour la table des réponses.
- * Les calculs de score et de masse sont effectués ici pour être utilisés si besoin par d'autres fonctions.
+ * Traite les réponses dynamiques, calcule les indicateurs de score (EmatA, EapproB, etc.)
+ * et prépare les enregistrements pour la table des réponses.
  * @param {Object} formData - Les données du formulaire soumises par l'utilisateur.
  * @param {Array} dynamicQuestions - Les définitions des questions dynamiques (avec catégorie et coefficient).
  * @returns {Object} Un objet contenant les indicateurs calculés, les masses et les réponses à créer.
  */
 function processDynamicQuestionsAndCalculateScores(formData, dynamicQuestions) {
-    // Ces indicateurs sont toujours calculés car ils sont potentiellement utiles même sans enregistrement direct du score.
     const calculatedIndicators = {
         EmatA: 0, EmatB: 0,
         EapproA: 0, EapproB: 0,
         EfabA: 0, EfabB: 0,
         EdistribA: 0, EdistribB: 0,
-        EnrjA: 0, EnrjB: 0,
-        EeauA: 0, EeauB: 0,
-        EfdvA: 0, EfdvB: 0,
+        EnrjA: 0, EnrjB: 0, 
+        EeauA: 0, EeauB: 0, 
+        EfdvA: 0, EfdvB: 0, 
     };
     let productA_Mass = null;
     let productB_Mass = null;
@@ -272,13 +271,41 @@ async function batchCreateAnswersRecords(base, tableName, answersToCreate, produ
     console.log(`${answersToCreate.length} réponses dynamiques créées dans la table Réponses.`);
 }
 
+/**
+ * Crée l'enregistrement dans la table "Score" avec les indicateurs individuels et les masses.
+ * Les scores globaux (Score_cycle_vie_1, Score_final_sur_5) ne sont PAS calculés ni inclus ici.
+ * @param {Object} base - L'instance de la base Airtable.
+ * @param {string} tableName - Le nom de la table Score.
+ * @param {string} productId - L'ID du produit lié.
+ * @param {Object} calculatedIndicators - L'objet contenant tous les indicateurs (EmatA, EmatB, etc.).
+ * @param {number|string} productA_Mass - La masse du produit A.
+ * @param {number|string} productB_Mass - La masse du produit B.
+ * @returns {string} L'ID de l'enregistrement Score créé.
+ */
+async function createScoreRecord(base, tableName, productId, calculatedIndicators, productA_Mass, productB_Mass) {
+    const scoreRecord = await base(tableName).create(
+        [{
+            fields: {
+                "ID_produit": [productId], // Liaison avec l'enregistrement Produit créé.
+                ...calculatedIndicators, // Dégage tous les indicateurs (EmatA, EmatB, etc.) dans l'objet fields.
+                "MasseA": productA_Mass,
+                "MasseB": productB_Mass,
+                // Score_cycle_vie_1 et Score_final_sur_5 ne sont pas inclus ici.
+            }
+        }],
+        { typecast: true }
+    );
+    console.log('Enregistrement Score créé avec ID :', scoreRecord[0].id);
+    return scoreRecord[0].id;
+}
+
 
 // --- Fonction de gestionnaire principale Netlify ---
 
 /**
  * Fonction de gestionnaire principale pour les requêtes HTTP entrantes vers ce service Netlify.
  * Elle orchestre le flux complet de traitement d'une soumission de formulaire :
- * validation, parsing, création d'enregistrements dans Airtable (Fournisseur, Produit, Réponses).
+ * validation, parsing, création d'enregistrements dans Airtable (Fournisseur, Produit, Réponses, Score).
  * @param {Object} event - L'objet événement de la requête HTTP entrante, contenant toutes les informations (méthode, en-têtes, corps).
  * @returns {Object} La réponse HTTP à renvoyer au client, incluant le statut, les en-têtes et le corps JSON.
  */
@@ -315,8 +342,7 @@ exports.handler = async (event) => {
 
         // 4. Initialiser la connexion à la base Airtable et récupérer les noms de tables configurés.
         const base = initializeAirtableBase();
-        // Note: 'scoreTableName' a été retiré de getAirtableTableNames et n'est plus nécessaire ici.
-        const { supplierTableName, productTableName, answersTableName } = getAirtableTableNames();
+        const { supplierTableName, productTableName, answersTableName, scoreTableName } = getAirtableTableNames();
 
         // 5. Créer l'enregistrement pour le Fournisseur dans Airtable.
         const supplierId = await createSupplierRecord(base, supplierTableName, formData);
@@ -325,23 +351,25 @@ exports.handler = async (event) => {
         const productId = await createProductRecord(base, productTableName, formData, supplierId);
 
         // 7. Traiter les questions dynamiques et préparer les réponses.
-        // Les indicateurs sont toujours calculés, mais ne sont plus explicitement enregistrés dans une table "Score".
-        // Ils pourraient être utilisés pour des logs ou des traitements ultérieurs non liés à Airtable.
+        // Les indicateurs individuels sont calculés ici.
         const { calculatedIndicators, productA_Mass, productB_Mass, answersToCreate } =
             processDynamicQuestionsAndCalculateScores(formData, dynamicQuestions);
 
         // 8. Créer les enregistrements de Réponses par lots dans Airtable.
         await batchCreateAnswersRecords(base, answersTableName, answersToCreate, productId);
 
-        // 9. Retourner une réponse de succès au client.
-        // Note: 'scoreId' a été retiré de la réponse car la table Score n'est plus utilisée.
+        // 9. Créer l'enregistrement dans la table "Score" avec les indicateurs individuels et les masses.
+        const scoreId = await createScoreRecord(base, scoreTableName, productId, calculatedIndicators, productA_Mass, productB_Mass);
+
+        // 10. Retourner une réponse de succès au client.
         return {
             statusCode: 200,
             headers: headers,
             body: JSON.stringify({
-                message: 'Informations (Fournisseur, Produit, Réponses) envoyées avec succès !',
+                message: 'Informations (Fournisseur, Produit, Réponses, Score) envoyées avec succès !',
                 supplierId: supplierId,
                 productId: productId,
+                scoreId: scoreId, // L'ID de l'enregistrement Score créé.
             }),
         };
 
