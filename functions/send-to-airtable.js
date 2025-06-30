@@ -158,7 +158,7 @@ async function createProductRecord(base, tableName, formData, supplierId) {
  * et collecte toutes les réponses du formulaire pour la table BDD produits.
  * @param {Object} formData - Les données du formulaire soumises par l'utilisateur.
  * @param {Array} dynamicQuestions - Les définitions des questions dynamiques (avec catégorie et coefficient).
- * @returns {Object} Un objet contenant les indicateurs calculés, les masses, les durées de vie, toutes les réponses brutes et les réponses à créer pour la table "Answers".
+ * @returns {Object} Un objet contenant les indicateurs calculés, les masses, les durées de vie, toutes les réponses brutes et les réponses à créer pour la table "Answers", et la questionLookupMap.
  */
 function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions) {
     const calculatedIndicators = {
@@ -288,7 +288,8 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
         productA_DureeVie,
         productB_DureeVie,
         answersToCreateForAnswersTable,
-        allRelevantFormDataForBddProducts
+        allRelevantFormDataForBddProducts,
+        questionLookupMap // NOUVEAU: Retourne la map des questions
     };
 }
 
@@ -355,14 +356,15 @@ async function createScoreRecord(base, tableName, productId, calculatedIndicator
  * @param {string} bddProductsTableName - Le nom de la table BDD produits.
  * @param {string} baseId - L'ID de la base Airtable.
  * @param {Object} dataForBddProduct - Les données que nous allons insérer, utilisées pour déterminer les champs à créer.
+ * @param {Map} questionLookupMap - La map des définitions de questions pour obtenir le type.
  * @returns {Promise<void>}
  */
-async function ensureAirtableFieldsExist(base, bddProductsTableName, baseId, dataForBddProduct) {
+async function ensureAirtableFieldsExist(base, bddProductsTableName, baseId, dataForBddProduct, questionLookupMap) {
     const airtableApiUrl = `https://api.airtable.com/v0/meta/bases/${baseId}/tables`;
     const apiKey = process.env.AIRTABLE_API_KEY;
 
     try {
-        // 1. Récupérer le schéma de la base pour trouver l'ID de la table BDD produits
+        // 1. Récupérer le schéma de la base pour trouver l'ID de la table BDD produits et d'autres tables liées
         const metaResponse = await fetch(airtableApiUrl, {
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
@@ -374,6 +376,10 @@ async function ensureAirtableFieldsExist(base, bddProductsTableName, baseId, dat
         const metaData = await metaResponse.json();
         const bddTable = metaData.tables.find(table => table.name === bddProductsTableName);
 
+        // Récupérer les IDs des tables nécessaires pour les champs de liaison
+        const tableIdsByName = new Map(metaData.tables.map(table => [table.name, table.id]));
+        const productTableId = tableIdsByName.get(process.env.AIRTABLE_PRODUCT_TABLE_NAME);
+
         if (!bddTable) {
             console.error(`Table "${bddProductsTableName}" non trouvée dans la base. Impossible de créer des champs.`);
             throw new Error(`Table Airtable "${bddProductsTableName}" introuvable.`);
@@ -382,30 +388,107 @@ async function ensureAirtableFieldsExist(base, bddProductsTableName, baseId, dat
         const existingFieldNames = new Set(bddTable.fields.map(field => field.name));
         const fieldsToCreate = [];
 
-        // Les champs de liaison ont un type spécial, et Nom du produit est généralement textuel.
-        // On les exclut de la création automatique pour éviter des erreurs ou des types incorrects.
-        const alwaysPresentFields = ["ID Produit", "Nom du produit"];
+        // Ces champs sont soit gérés en interne (`ID Produit`, `Nom du produit`),
+        // soit des indicateurs calculés (`EmatA`, etc.),
+        // soit des champs comme `MasseA/B`, `DureeVieA/B` dont le type est pré-déterminé.
+        // Ils sont exclus de la détection de type dynamique ici pour éviter des conflits ou des créations incorrectes.
+        // Assurez-vous que ces champs sont créés ou existent avec les types appropriés dans votre base Airtable.
+        const excludedFromDynamicCreation = new Set([
+            "ID Produit", "Nom du produit",
+            "MasseA", "MasseB", "DureeVieA", "DureeVieB",
+            "EmatA", "EmatB", "EapproA", "EapproB",
+            "EfabA", "EfabB", "EdistribA", "EdistribB",
+            "EnrjA", "EnrjB", "EeauA", "EeauB", "EfdvA", "EfdvB"
+        ]);
+
 
         for (const fieldName in dataForBddProduct) {
-            if (!existingFieldNames.has(fieldName) && !alwaysPresentFields.includes(fieldName)) {
-                // Tente de déterminer le type de champ basé sur la valeur.
-                // Attention: C'est une simplification. Pour une robustesse totale, vous auriez besoin
-                // d'une configuration plus explicite (e.g., une map en dur des types de champs).
+            if (!existingFieldNames.has(fieldName) && !excludedFromDynamicCreation.has(fieldName)) {
                 let fieldType = 'singleLineText'; // Type par défaut si non spécifié ou indéterminable
-                const value = dataForBddProduct[fieldName];
+                let fieldOptions = {}; // Pour les types avec options (selects, liens)
 
-                if (typeof value === 'number' || (typeof value === 'string' && value.match(/^-?\d+(\.\d+)?$/) && !isNaN(parseFloat(value)))) {
-                    fieldType = 'number';
-                } else if (typeof value === 'boolean') {
-                    fieldType = 'checkbox';
+                const questionDef = questionLookupMap.get(fieldName);
+
+                // Priorité 1: Utiliser le type_questions de la définition de la question si disponible
+                if (questionDef && questionDef.type_questions) {
+                    switch (questionDef.type_questions.toLowerCase()) {
+                        case 'number':
+                            fieldType = 'number';
+                            fieldOptions = { precision: 2 }; // Précision par défaut pour les nombres
+                            break;
+                        case 'text':
+                            fieldType = 'singleLineText';
+                            break;
+                        case 'longtext':
+                            fieldType = 'multilineText';
+                            break;
+                        case 'checkbox':
+                            fieldType = 'checkbox';
+                            break;
+                        case 'singleselect':
+                            fieldType = 'singleSelect';
+                            if (questionDef.options && Array.isArray(questionDef.options)) {
+                                fieldOptions = { choices: questionDef.options.map(opt => ({ name: opt })) };
+                            } else {
+                                console.warn(`DEBUG SERVER: Champ '${fieldName}' de type 'singleSelect' sans options définies dans dynamicQuestions. Création comme 'singleLineText' (fallback).`);
+                                fieldType = 'singleLineText'; // Fallback si options manquantes
+                            }
+                            break;
+                        case 'multiselect':
+                            fieldType = 'multipleSelect';
+                            if (questionDef.options && Array.isArray(questionDef.options)) {
+                                fieldOptions = { choices: questionDef.options.map(opt => ({ name: opt })) };
+                            } else {
+                                console.warn(`DEBUG SERVER: Champ '${fieldName}' de type 'multipleSelect' sans options définies dans dynamicQuestions. Création comme 'singleLineText' (fallback).`);
+                                fieldType = 'singleLineText'; // Fallback si options manquantes
+                            }
+                            break;
+                        case 'linktorecord':
+                            // Pour le champ "ID Produit" qui est un lien vers la table "Produits"
+                            if (fieldName === "ID Produit" && productTableId) {
+                                fieldType = 'multipleRecordLinks'; // C'est le type API pour un champ de liaison
+                                fieldOptions = {
+                                    linkedTableId: productTableId,
+                                    // Par défaut, Airtable crée le champ back-link, pas besoin de le spécifier ici.
+                                    // Permettre la liaison à plusieurs enregistrements si `multiple` est vrai dans la questionDef
+                                    isReversed: false // Pas un champ inversé par défaut, l'autre table le gérera.
+                                };
+                                // Si c'est un lien 1:1, mettez la bonne option:
+                                if (questionDef.multiple === false) {
+                                     // L'API Airtable ne fournit pas directement un 'singleRecordLink' type
+                                     // C'est géré par 'multipleRecordLinks' avec des options.
+                                     // Pour forcer une liaison unique via API, c'est plus complexe.
+                                     // La meilleure pratique est de le gérer dans l'UI ou de s'assurer que
+                                     // la logique de votre application n'envoie qu'un seul ID.
+                                }
+                            } else {
+                                console.warn(`DEBUG SERVER: Champ '${fieldName}' est de type 'linkToRecord' mais n'est pas "ID Produit" ou table liée manquante. Création comme 'singleLineText' (fallback).`);
+                                fieldType = 'singleLineText';
+                            }
+                            break;
+                        // Ajoutez d'autres types de champs si nécessaire (date, email, url, etc.)
+                        default:
+                            console.warn(`DEBUG SERVER: Type de question inconnu '${questionDef.type_questions}' pour le champ '${fieldName}'. Utilisation de 'singleLineText' par défaut.`);
+                            fieldType = 'singleLineText';
+                    }
+                } else {
+                    // Fallback à la détection basée sur la valeur si pas de type_questions ou pas une question dynamique
+                    const value = dataForBddProduct[fieldName];
+                    if (typeof value === 'number' || (typeof value === 'string' && value.match(/^-?\d+(\.\d+)?$/) && !isNaN(parseFloat(value)))) {
+                        fieldType = 'number';
+                        fieldOptions = { precision: 2 };
+                    } else if (typeof value === 'boolean') {
+                        fieldType = 'checkbox';
+                    }
+                    // Vous pouvez ajouter d'autres détections de type ici (date, email, url, etc.)
                 }
-                // Vous pouvez ajouter d'autres détections de type ici (date, email, url, etc.)
 
-                fieldsToCreate.push({
+                const newField = {
                     name: fieldName,
                     type: fieldType,
-                    // Si 'number', vous pouvez ajouter des options: "options": {"precision": "0.01"}
-                });
+                    options: fieldOptions // Inclut les options pour les types select et link
+                };
+                fieldsToCreate.push(newField);
             }
         }
 
@@ -425,7 +508,7 @@ async function ensureAirtableFieldsExist(base, bddProductsTableName, baseId, dat
 
             if (!createFieldsResponse.ok) {
                 console.error('Erreur lors de la création des champs Airtable:', createFieldsResult);
-                // Ne pas jeter d'erreur ici si on veut que l'enregistrement se poursuive même si la création de champ échoue
+                // Ne pas jeter d'erreur ici pour que l'enregistrement se poursuive même si la création de champ échoue
                 // mais loggez l'erreur pour débogage.
             } else {
                 console.log('Champs Airtable créés avec succès ou déjà existants.');
@@ -454,7 +537,10 @@ async function ensureAirtableFieldsExist(base, bddProductsTableName, baseId, dat
  */
 async function createBddProductRecord(base, tableName, productId, formData, allRelevantFormDataForBddProducts) {
     const fieldsToCreate = {
-        "ID Produit": [productId], // Liaison optionnelle avec la table Produit
+        // Le champ "ID Produit" est géré ici car il est toujours un lien vers l'ID produit que nous venons de créer.
+        // Assurez-vous que ce champ "ID Produit" existe (et est un champ de liaison) dans votre table "BDD produits"
+        // Il est EXCLU de la création dynamique car sa cible est spécifique à cette fonction.
+        "ID Produit": [productId],
         "Nom du produit": formData.nom_produit, // Pour un visuel rapide
         ...allRelevantFormDataForBddProducts // Toutes les réponses dynamiques du formulaire
     };
@@ -520,12 +606,14 @@ exports.handler = async (event) => {
         // 6. Créer l'enregistrement pour le Produit dans Airtable et le lier au Fournisseur.
         const productId = await createProductRecord(base, productTableName, formData, supplierId);
 
-        // 7. Traiter les questions dynamiques et collecter toutes les réponses.
-        const { calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie, answersToCreateForAnswersTable, allRelevantFormDataForBddProducts } =
+        // 7. Traiter les questions dynamiques et collecter toutes les réponses,
+        // et obtenir la questionLookupMap.
+        const { calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie, answersToCreateForAnswersTable, allRelevantFormDataForBddProducts, questionLookupMap } =
             processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions);
 
         // 8. Avant de créer l'enregistrement, assurez-vous que tous les champs nécessaires existent dans la table BDD produits.
-        await ensureAirtableFieldsExist(base, bddProductsTableName, baseId, allRelevantFormDataForBddProducts);
+        // Passe maintenant la questionLookupMap pour une meilleure détection des types.
+        await ensureAirtableFieldsExist(base, bddProductsTableName, baseId, allRelevantFormDataForBddProducts, questionLookupMap);
 
         // 9. Créer les enregistrements de Réponses par lots dans Airtable.
         await batchCreateAnswersRecords(base, answersTableName, answersToCreateForAnswersTable, productId);
