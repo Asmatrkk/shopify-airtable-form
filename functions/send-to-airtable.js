@@ -1,9 +1,14 @@
 // netlify/functions/send-to-airtable.js
 
 const Airtable = require('airtable');
+const fetch = require('node-fetch'); // Nécessaire pour les appels à l'API Meta d'Airtable
 
 // --- Fonctions utilitaires pour la gestion de la requête et d'Airtable ---
 
+/**
+ * Définit et retourne les en-têtes CORS pour la réponse HTTP.
+ * @returns {Object} Les en-têtes CORS.
+ */
 function getCorsHeaders() {
     return {
         'Access-Control-Allow-Origin': 'https://nayorajewelry.com', // REMPLACER PAR LE DOMAINE SHOPIFY RÉEL
@@ -12,21 +17,33 @@ function getCorsHeaders() {
     };
 }
 
+/**
+ * Gère la requête de pré-vérification OPTIONS envoyée par les navigateurs.
+ * @param {Object} event - L'objet événement de la requête HTTP.
+ * @param {Object} headers - Les en-têtes CORS.
+ * @returns {Object} La réponse HTTP pour la requête OPTIONS.
+ */
 function handleOptionsRequest(event, headers) {
     if (event.httpMethod === 'OPTIONS') {
         return {
-            statusCode: 204,
+            statusCode: 204, // No Content
             headers: headers,
             body: '',
         };
     }
-    return null;
+    return null; // Indique que la requête n'était pas de type OPTIONS
 }
 
+/**
+ * Valide que la méthode HTTP est POST et que le corps de la requête est présent.
+ * @param {Object} event - L'objet événement de la requête HTTP.
+ * @param {Object} headers - Les en-têtes CORS.
+ * @returns {Object|null} La réponse d'erreur HTTP si invalide, sinon null.
+ */
 function validatePostRequest(event, headers) {
     if (event.httpMethod !== 'POST' || !event.body) {
         return {
-            statusCode: 405,
+            statusCode: 405, // Method Not Allowed
             headers: headers,
             body: JSON.stringify({ message: 'Méthode non autorisée ou corps de requête manquant.' }),
         };
@@ -34,6 +51,13 @@ function validatePostRequest(event, headers) {
     return null;
 }
 
+/**
+ * Parse le corps de la requête JSON.
+ * @param {string} body - Le corps de la requête HTTP.
+ * @param {Object} headers - Les en-têtes CORS pour les réponses d'erreur.
+ * @returns {Object} L'objet JavaScript parsé.
+ * @throws {Object} Une réponse d'erreur HTTP si le parsing échoue.
+ */
 function parseRequestBody(body, headers) {
     try {
         const parsedBody = JSON.parse(body);
@@ -41,14 +65,19 @@ function parseRequestBody(body, headers) {
         return parsedBody;
     } catch (error) {
         console.error('Erreur de parsing JSON du corps de la requête :', error);
-        throw {
-            statusCode: 400,
+        throw { // Lance une exception qui sera capturée par le try/catch principal
+            statusCode: 400, // Bad Request
             headers: headers,
             body: JSON.stringify({ message: 'Le corps de la requête n\'est pas un JSON valide.' }),
         };
     }
 }
 
+/**
+ * Initialise le client Airtable avec les variables d'environnement.
+ * @returns {Object} L'instance de la base Airtable.
+ * @throws {Error} Si les variables d'environnement Airtable ne sont pas définies.
+ */
 function initializeAirtableBase() {
     const apiKey = process.env.AIRTABLE_API_KEY;
     const baseId = process.env.AIRTABLE_BASE_ID;
@@ -59,6 +88,11 @@ function initializeAirtableBase() {
     return new Airtable({ apiKey: apiKey }).base(baseId);
 }
 
+/**
+ * Récupère les noms des tables Airtable depuis les variables d'environnement.
+ * @returns {Object} Un objet contenant les noms des tables.
+ * @throws {Error} Si une variable d'environnement pour une table est manquante.
+ */
 function getAirtableTableNames() {
     const supplierTableName = process.env.AIRTABLE_SUPPLIER_TABLE_NAME;
     const productTableName = process.env.AIRTABLE_PRODUCT_TABLE_NAME;
@@ -72,6 +106,13 @@ function getAirtableTableNames() {
     return { supplierTableName, productTableName, answersTableName, scoreTableName, bddProductsTableName };
 }
 
+/**
+ * Crée un enregistrement Fournisseur dans Airtable.
+ * @param {Object} base - L'instance de la base Airtable.
+ * @param {string} tableName - Le nom de la table Fournisseurs.
+ * @param {Object} formData - Les données du formulaire.
+ * @returns {string} L'ID de l'enregistrement Fournisseur créé.
+ */
 async function createSupplierRecord(base, tableName, formData) {
     const supplierRecord = await base(tableName).create(
         [{
@@ -89,6 +130,14 @@ async function createSupplierRecord(base, tableName, formData) {
     return supplierRecord[0].id;
 }
 
+/**
+ * Crée un enregistrement Produit dans Airtable et le lie au fournisseur.
+ * @param {Object} base - L'instance de la base Airtable.
+ * @param {string} tableName - Le nom de la table Produits.
+ * @param {Object} formData - Les données du formulaire.
+ * @param {string} supplierId - L'ID du fournisseur lié.
+ * @returns {string} L'ID de l'enregistrement Produit créé.
+ */
 async function createProductRecord(base, tableName, formData, supplierId) {
     const productRecord = await base(tableName).create(
         [{
@@ -104,6 +153,13 @@ async function createProductRecord(base, tableName, formData, supplierId) {
     return productRecord[0].id;
 }
 
+/**
+ * Traite les réponses dynamiques, calcule les indicateurs de score (EmatA, EapproB, etc.)
+ * et collecte toutes les réponses du formulaire pour la table BDD produits.
+ * @param {Object} formData - Les données du formulaire soumises par l'utilisateur.
+ * @param {Array} dynamicQuestions - Les définitions des questions dynamiques (avec catégorie et coefficient).
+ * @returns {Object} Un objet contenant les indicateurs calculés, les masses, les durées de vie, toutes les réponses brutes et les réponses à créer pour la table "Answers".
+ */
 function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions) {
     const calculatedIndicators = {
         EmatA: 0, EmatB: 0,
@@ -121,12 +177,14 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
     const answersToCreateForAnswersTable = [];
     const allRelevantFormDataForBddProducts = {};
 
+    // Liste des clés de formData à ignorer pour BDD produits car elles sont gérées ailleurs ou non pertinentes
     const ignoredKeys = [
         'prenom_fournisseur', 'nom_fournisseur', 'email_fournisseur',
         'entreprise_fournisseur', 'siret_fournisseur', 'nom_produit',
         'description_produit', 'timestamp_soumission'
     ];
 
+    // Crée une Map pour un accès rapide aux définitions complètes des questions.
     const questionLookupMap = new Map();
     if (Array.isArray(dynamicQuestions)) {
         dynamicQuestions.forEach(q => {
@@ -136,17 +194,26 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
         });
     }
 
+    // --- DÉBUT DE LA BOUCLE ---
     for (const key in formData) {
+        // *** DÉCLARATION ET ASSIGNATION DE QUESTIONDEF ICI ***
+        // C'est le premier point où 'questionDef' est défini pour chaque 'key'
+        const questionDef = questionLookupMap.get(key);
+
         let answerValue = formData[key];
 
+        // Gère les réponses multiples (ex: checkboxes)
         if (Array.isArray(answerValue)) {
             answerValue = answerValue.join(', ');
         }
 
+        // Collecte toutes les réponses pertinentes pour la table BDD produits
+        // N'ajoute pas les champs Fournisseur/Produit déjà gérés ou non des questions
         if (!ignoredKeys.includes(key)) {
             allRelevantFormDataForBddProducts[key] = answerValue;
         }
 
+        // Récupère les masses
         if (key === 'MasseA') {
             productA_Mass = parseFloat(answerValue);
             if (isNaN(productA_Mass)) {
@@ -162,6 +229,7 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
             }
         }
 
+        // Récupère les durées de vie
         if (key === 'DureeVieA') {
             productA_DureeVie = parseFloat(answerValue);
             if (isNaN(productA_DureeVie)) {
@@ -177,6 +245,8 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
             }
         }
 
+        // Calcule et accumule les scores pour les catégories définies.
+        // La vérification 'if (questionDef)' est CRUCIALE ici.
         if (questionDef && calculatedIndicators.hasOwnProperty(questionDef.categorie_questions)) {
             const numericAnswer = parseFloat(answerValue);
             const coefficient = parseFloat(questionDef.coeff_questions);
@@ -189,7 +259,9 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
             }
         }
 
-        if (answerValue !== undefined && answerValue !== null && String(answerValue).trim() !== '' && questionDef && questionDef.id_question) {
+        // Prépare les données pour l'enregistrement dans la table "Réponses" (liée aux questions par ID)
+        // La vérification 'if (questionDef)' est CRUCIALE ici.
+        if (questionDef && answerValue !== undefined && answerValue !== null && String(answerValue).trim() !== '' && questionDef.id_question) {
             answersToCreateForAnswersTable.push({
                 fields: {
                     "ID_produit": [],
@@ -199,6 +271,7 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
             });
         }
     }
+    // --- FIN DE LA BOUCLE ---
 
     // Assurez-vous d'inclure les indicateurs calculés, masses et durées de vie dans allRelevantFormDataForBddProducts
     // pour qu'ils soient aussi créés ou mis à jour dans la table BDD produits.
@@ -207,7 +280,6 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
     if (productB_Mass !== null) allRelevantFormDataForBddProducts["MasseB"] = productB_Mass;
     if (productA_DureeVie !== null) allRelevantFormDataForBddProducts["DureeVieA"] = productA_DureeVie;
     if (productB_DureeVie !== null) allRelevantFormDataForBddProducts["DureeVieB"] = productB_DureeVie;
-
 
     return {
         calculatedIndicators,
@@ -220,6 +292,13 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
     };
 }
 
+/**
+ * Crée les enregistrements de réponses par lots dans Airtable.
+ * @param {Object} base - L'instance de la base Airtable.
+ * @param {string} tableName - Le nom de la table Réponses.
+ * @param {Array} answersToCreate - Le tableau des réponses à créer.
+ * @param {string} productId - L'ID du produit pour lier les réponses.
+ */
 async function batchCreateAnswersRecords(base, tableName, answersToCreate, productId) {
     if (answersToCreate.length === 0) {
         console.log('DEBUG SERVER: Aucune réponse dynamique à créer dans la table Réponses.');
@@ -227,9 +306,10 @@ async function batchCreateAnswersRecords(base, tableName, answersToCreate, produ
     }
 
     console.log(`DEBUG SERVER: Tentative de création de ${answersToCreate.length} réponses dans la table Réponses.`);
-    const batchSize = 10;
+    const batchSize = 10; // Limite de l'API Airtable pour les opérations en batch.
     for (let i = 0; i < answersToCreate.length; i += batchSize) {
         const batch = answersToCreate.slice(i, i + batchSize);
+        // Ajoute l'ID_produit à chaque enregistrement du lot
         batch.forEach(record => {
             record.fields["ID_produit"] = [productId];
         });
@@ -238,12 +318,24 @@ async function batchCreateAnswersRecords(base, tableName, answersToCreate, produ
     console.log(`${answersToCreate.length} réponses dynamiques créées dans la table Réponses.`);
 }
 
+/**
+ * Crée l'enregistrement dans la table "Score" avec les indicateurs individuels, les masses et les durées de vie.
+ * @param {Object} base - L'instance de la base Airtable.
+ * @param {string} tableName - Le nom de la table Score.
+ * @param {string} productId - L'ID du produit lié.
+ * @param {Object} calculatedIndicators - L'objet contenant tous les indicateurs (EmatA, EmatB, etc.).
+ * @param {number|string} productA_Mass - La masse du produit A.
+ * @param {number|string} productB_Mass - La masse du produit B.
+ * @param {number|string} productA_DureeVie - La durée de vie du produit A.
+ * @param {number|string} productB_DureeVie - La durée de vie du produit B.
+ * @returns {string} L'ID de l'enregistrement Score créé.
+ */
 async function createScoreRecord(base, tableName, productId, calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie) {
     const scoreRecord = await base(tableName).create(
         [{
             fields: {
-                "ID_produit": [productId],
-                ...calculatedIndicators,
+                "ID_produit": [productId], // Liaison avec l'enregistrement Produit créé.
+                ...calculatedIndicators, // Dégage tous les indicateurs (EmatA, EmatB, etc.) dans l'objet fields.
                 "MasseA": productA_Mass,
                 "MasseB": productB_Mass,
                 "DureeVieA": productA_DureeVie,
@@ -257,7 +349,6 @@ async function createScoreRecord(base, tableName, productId, calculatedIndicator
 }
 
 /**
- * **NOUVELLE FONCTION**
  * Vérifie l'existence des champs dans la table BDD produits et les crée si nécessaire.
  * Nécessite un jeton Airtable avec la portée `schema.bases:write`.
  * @param {Object} base - L'instance de la base Airtable.
@@ -278,7 +369,7 @@ async function ensureAirtableFieldsExist(base, bddProductsTableName, baseId, dat
             },
         });
         if (!metaResponse.ok) {
-            throw new Error(`Erreur lors de la récupération du schéma Airtable: ${metaResponse.statusText}`);
+            throw new Error(`Erreur lors de la récupération du schéma Airtable: ${metaResponse.statusText}. Code: ${metaResponse.status}`);
         }
         const metaData = await metaResponse.json();
         const bddTable = metaData.tables.find(table => table.name === bddProductsTableName);
@@ -294,7 +385,7 @@ async function ensureAirtableFieldsExist(base, bddProductsTableName, baseId, dat
         // Les champs de liaison ont un type spécial, et Nom du produit est généralement textuel.
         // On les exclut de la création automatique pour éviter des erreurs ou des types incorrects.
         const alwaysPresentFields = ["ID Produit", "Nom du produit"];
-        
+
         for (const fieldName in dataForBddProduct) {
             if (!existingFieldNames.has(fieldName) && !alwaysPresentFields.includes(fieldName)) {
                 // Tente de déterminer le type de champ basé sur la valeur.
@@ -303,12 +394,12 @@ async function ensureAirtableFieldsExist(base, bddProductsTableName, baseId, dat
                 let fieldType = 'singleLineText'; // Type par défaut si non spécifié ou indéterminable
                 const value = dataForBddProduct[fieldName];
 
-                if (typeof value === 'number' || (typeof value === 'string' && !isNaN(parseFloat(value)) && isFinite(value))) {
+                if (typeof value === 'number' || (typeof value === 'string' && value.match(/^-?\d+(\.\d+)?$/) && !isNaN(parseFloat(value)))) {
                     fieldType = 'number';
                 } else if (typeof value === 'boolean') {
                     fieldType = 'checkbox';
                 }
-                // D'autres types pourraient être détectés ici (date, email, url, etc.)
+                // Vous pouvez ajouter d'autres détections de type ici (date, email, url, etc.)
 
                 fieldsToCreate.push({
                     name: fieldName,
@@ -351,11 +442,21 @@ async function ensureAirtableFieldsExist(base, bddProductsTableName, baseId, dat
 }
 
 
+/**
+ * Crée un enregistrement dans la nouvelle table "BDD produits" pour un visuel global.
+ * Ce record inclura toutes les réponses pertinentes du formulaire.
+ * @param {Object} base - L'instance de la base Airtable.
+ * @param {string} tableName - Le nom de la table "BDD produits".
+ * @param {string} productId - L'ID du produit lié.
+ * @param {Object} formData - Les données brutes du formulaire (pour récupérer nom_produit).
+ * @param {Object} allRelevantFormDataForBddProducts - L'objet contenant toutes les questions/réponses pertinentes du formulaire.
+ * @returns {string} L'ID de l'enregistrement BDD Produit créé.
+ */
 async function createBddProductRecord(base, tableName, productId, formData, allRelevantFormDataForBddProducts) {
     const fieldsToCreate = {
-        "ID Produit": [productId],
-        "Nom du produit": formData.nom_produit,
-        ...allRelevantFormDataForBddProducts
+        "ID Produit": [productId], // Liaison optionnelle avec la table Produit
+        "Nom du produit": formData.nom_produit, // Pour un visuel rapide
+        ...allRelevantFormDataForBddProducts // Toutes les réponses dynamiques du formulaire
     };
 
     const bddProductRecord = await base(tableName).create(
@@ -370,24 +471,37 @@ async function createBddProductRecord(base, tableName, productId, formData, allR
 
 // --- Fonction de gestionnaire principale Netlify ---
 
+/**
+ * Fonction de gestionnaire principale pour les requêtes HTTP entrantes vers ce service Netlify.
+ * Elle orchestre le flux complet de traitement d'une soumission de formulaire :
+ * validation, parsing, création d'enregistrements dans Airtable (Fournisseur, Produit, Réponses, Score, BDD Produits).
+ * @param {Object} event - L'objet événement de la requête HTTP entrante, contenant toutes les informations (méthode, en-têtes, corps).
+ * @returns {Object} La réponse HTTP à renvoyer au client, incluant le statut, les en-têtes et le corps JSON.
+ */
 exports.handler = async (event) => {
-    const headers = getCorsHeaders();
+    const headers = getCorsHeaders(); // Récupère les en-têtes CORS standards pour les réponses.
 
+    // 1. Gérer les requêtes OPTIONS (pré-vérification CORS).
     const optionsResponse = handleOptionsRequest(event, headers);
     if (optionsResponse) {
         return optionsResponse;
     }
 
+    // 2. Valider la méthode HTTP (doit être POST) et la présence d'un corps de requête.
     const validationError = validatePostRequest(event, headers);
     if (validationError) {
         return validationError;
     }
 
     try {
-        const requestBody = parseRequestBody(event.body, headers);
-        const formData = requestBody.formData;
-        const dynamicQuestions = requestBody.dynamicQuestions;
+        // Le bloc try/catch principal englobe toutes les opérations asynchrones pour une gestion centralisée des erreurs.
 
+        // 3. Parser le corps de la requête JSON pour en extraire les données.
+        const requestBody = parseRequestBody(event.body, headers);
+        const formData = requestBody.formData; // Données brutes du formulaire soumis par l'utilisateur.
+        const dynamicQuestions = requestBody.dynamicQuestions; // Définitions des questions (catégories, coefficients).
+
+        // Validation initiale des données critiques.
         if (!formData) {
             throw { statusCode: 400, headers: headers, body: JSON.stringify({ message: 'Données du formulaire (formData) manquantes.' }) };
         }
@@ -395,26 +509,34 @@ exports.handler = async (event) => {
             console.warn("dynamicQuestions n'est pas un tableau valide ou est manquant. Cela peut affecter les calculs des indicateurs. Cependant, toutes les données du formulaire seront tout de même envoyées à BDD produits.");
         }
 
+        // 4. Initialiser la connexion à la base Airtable et récupérer les noms de tables configurés.
         const base = initializeAirtableBase();
         const { supplierTableName, productTableName, answersTableName, scoreTableName, bddProductsTableName } = getAirtableTableNames();
         const baseId = process.env.AIRTABLE_BASE_ID; // Récupère l'ID de la base pour l'API Meta
 
+        // 5. Créer l'enregistrement pour le Fournisseur dans Airtable.
         const supplierId = await createSupplierRecord(base, supplierTableName, formData);
+
+        // 6. Créer l'enregistrement pour le Produit dans Airtable et le lier au Fournisseur.
         const productId = await createProductRecord(base, productTableName, formData, supplierId);
 
+        // 7. Traiter les questions dynamiques et collecter toutes les réponses.
         const { calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie, answersToCreateForAnswersTable, allRelevantFormDataForBddProducts } =
             processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions);
 
-        // --- NOUVELLE ÉTAPE IMPORTANTE ---
-        // Avant de créer l'enregistrement, assurez-vous que tous les champs nécessaires existent dans la table BDD produits.
+        // 8. Avant de créer l'enregistrement, assurez-vous que tous les champs nécessaires existent dans la table BDD produits.
         await ensureAirtableFieldsExist(base, bddProductsTableName, baseId, allRelevantFormDataForBddProducts);
-        // --- FIN NOUVELLE ÉTAPE IMPORTANTE ---
 
+        // 9. Créer les enregistrements de Réponses par lots dans Airtable.
         await batchCreateAnswersRecords(base, answersTableName, answersToCreateForAnswersTable, productId);
+
+        // 10. Créer l'enregistrement dans la table "Score" avec les indicateurs individuels, les masses et les durées de vie.
         const scoreId = await createScoreRecord(base, scoreTableName, productId, calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie);
 
+        // 11. Créer l'enregistrement dans la nouvelle table "BDD produits" avec TOUTES les réponses du formulaire.
         const bddProductId = await createBddProductRecord(base, bddProductsTableName, productId, formData, allRelevantFormDataForBddProducts);
 
+        // 12. Retourner une réponse de succès au client.
         return {
             statusCode: 200,
             headers: headers,
@@ -428,6 +550,7 @@ exports.handler = async (event) => {
         };
 
     } catch (error) {
+        // Gestion centralisée des erreurs : capture toutes les exceptions lancées dans le bloc try.
         console.error('Erreur globale lors de l\'envoi à Airtable ou du traitement de la requête :', error);
 
         const statusCode = error.statusCode || 500;
