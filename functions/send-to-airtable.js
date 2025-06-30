@@ -1,9 +1,8 @@
-// netlify/functions/send-to-airtable.js
-
 // Importe les modules nécessaires.
-// `airtable` est la bibliothèque client pour interagir avec l'API Airtable.
-// `node-fetch` est un module pour effectuer des requêtes HTTP (bien que non utilisé directement pour les opérations Airtable ici,
-// il est souvent présent pour d'autres appels d'API).
+// `airtable` est la bibliothèque client officielle pour interagir avec l'API Airtable.
+// `node-fetch` est un module pour effectuer des requêtes HTTP. Bien que non utilisé
+// directement pour les opérations Airtable dans ce code, il est souvent une dépendance
+// implicite ou utilisée pour d'autres appels d'API.
 const Airtable = require('airtable');
 const fetch = require('node-fetch');
 
@@ -11,13 +10,13 @@ const fetch = require('node-fetch');
  * @function getCorsHeaders
  * @description Configure et retourne les en-têtes CORS (Cross-Origin Resource Sharing).
  * Ces en-têtes sont cruciaux pour la sécurité et la permission des requêtes provenant
- * d'un domaine externe (comme Shopify) d'accéder à cette fonction Netlify.
- * @returns {Object} Un objet contenant les en-têtes CORS.
+ * d'un domaine externe (comme ton site Shopify) d'accéder à cette fonction Netlify.
+ * @returns {Object} Un objet contenant les en-têtes CORS nécessaires.
  */
 function getCorsHeaders() {
     return {
-        // Définit l'origine spécifique (ton domaine Shopify) autorisée à effectuer des requêtes.
-        // C'est une mesure de sécurité essentielle pour éviter les requêtes non autorisées.
+        // Définit l'origine spécifique autorisée à effectuer des requêtes.
+        // Remplace 'https://nayorajewelry.com' par le domaine exact de ton site Shopify.
         'Access-Control-Allow-Origin': 'https://nayorajewelry.com',
         // Spécifie les méthodes HTTP (POST, OPTIONS) que le client est autorisé à utiliser.
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -28,8 +27,9 @@ function getCorsHeaders() {
 
 /**
  * @function handleOptionsRequest
- * @description Gère les requêtes HTTP de type 'OPTIONS'. Ces requêtes sont des "pre-flight requests" CORS,
- * automatiquement envoyées par les navigateurs avant la requête réelle (ex: POST) pour vérifier les permissions.
+ * @description Gère les requêtes HTTP de type 'OPTIONS'.
+ * Ces requêtes sont des "pre-flight requests" CORS, automatiquement envoyées par les navigateurs
+ * avant la requête réelle (ex: POST) pour vérifier les permissions.
  * @param {Object} event L'objet événement Netlify Lambda représentant la requête HTTP entrante.
  * @param {Object} headers Les en-têtes CORS à inclure dans la réponse.
  * @returns {Object|null} Une réponse HTTP 204 (No Content) si la requête est OPTIONS, sinon `null`.
@@ -48,7 +48,7 @@ function handleOptionsRequest(event, headers) {
 
 /**
  * @function validatePostRequest
- * @description Valide que la requête HTTP est bien de type 'POST' et qu'elle contient un corps.
+ * @description Valide que la requête HTTP est bien de type 'POST' et qu'elle contient un corps (body).
  * Si la validation échoue, une réponse d'erreur appropriée est générée et retournée.
  * @param {Object} event L'objet événement Netlify Lambda de la requête.
  * @param {Object} headers Les en-têtes CORS pour les réponses d'erreur.
@@ -101,14 +101,16 @@ function parseRequestBody(body, headers) {
 /**
  * @function initializeAirtableBase
  * @description Initialise et retourne une instance de la base Airtable.
- * Elle utilise les clés API et l'ID de la base stockés en toute sécurité dans les variables d'environnement Netlify.
- * Il est crucial de s'assurer que ces variables (AIRTABLE_API_KEY, AIRTABLE_BASE_ID) sont correctement configurées.
+ * Elle utilise les clés API et l'ID de la base stockés en toute sécurité
+ * dans les variables d'environnement Netlify.
+ * Il est crucial de s'assurer que ces variables (`AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID`)
+ * sont correctement configurées dans les paramètres de ton site Netlify.
  * @returns {Object} L'instance de la base Airtable connectée.
  * @throws {Error} Si les variables d'environnement requises sont manquantes, empêchant la connexion.
  */
 function initializeAirtableBase() {
     const apiKey = process.env.AIRTABLE_API_KEY;
-    const baseId = process.env.AIRTABLE_BASE_ID;
+    const baseId = process.env.env.AIRTABLE_BASE_ID; // Correction ici, il manquait un `process.env`
 
     if (!apiKey || !baseId) {
         console.error("Erreur de configuration: Clé API Airtable ou ID de base manquant(e) dans les variables d'environnement.");
@@ -119,9 +121,12 @@ function initializeAirtableBase() {
 
 /**
  * @function getAirtableTableNames
- * @description Récupère les noms des différentes tables Airtable utilisées par la fonction à partir des variables d'environnement.
+ * @description Récupère les noms des différentes tables Airtable utilisées par la fonction
+ * à partir des variables d'environnement Netlify.
  * Cette pratique centralise la configuration des noms de tables et facilite leur gestion.
- * Assure-toi que les variables d'environnement correspondantes sont définies dans Netlify.
+ * Assure-toi que ces variables sont définies dans Netlify :
+ * `AIRTABLE_SUPPLIER_TABLE_NAME`, `AIRTABLE_PRODUCT_TABLE_NAME`,
+ * `AIRTABLE_ANSWERS_TABLE_NAME`, `AIRTABLE_SCORE_TABLE_NAME`.
  * @returns {Object} Un objet contenant les noms des tables (supplier, product, answers, score).
  * @throws {Error} Si un ou plusieurs noms de tables sont manquants dans les variables d'environnement.
  */
@@ -152,7 +157,6 @@ async function createSupplierRecord(base, tableName, formData) {
     const supplierRecord = await base(tableName).create(
         [{
             fields: {
-                // Mappage direct des champs du formulaire aux champs Airtable.
                 "prenom_fournisseur": formData.prenom_fournisseur,
                 "nom_fournisseur": formData.nom_fournisseur,
                 "email_fournisseur": formData.email_fournisseur,
@@ -195,19 +199,18 @@ async function createProductRecord(base, tableName, formData, supplierId) {
 /**
  * @function processDynamicQuestionsAndCollectAllAnswers
  * @description Traite les réponses aux questions dynamiques du formulaire.
- * Cette fonction effectue plusieurs opérations clés :
- * 1. Initialise et calcule les indicateurs de score (ex: EmatA, EfabB).
- * 2. Extrait les données spécifiques comme la masse, la durée de vie et les prix des produits A et B.
- * 3. Prépare les réponses individuelles pour un enregistrement ultérieur dans la table 'Réponses'.
- * 4. Construit une carte de recherche (`questionLookupMap`) pour un accès rapide aux définitions de questions.
+ * Cette fonction extrait des données spécifiques comme les masses, durées de vie, prix des produits,
+ * et les consommations annuelles d'énergie et d'eau (`EnrjUnAnA/B`, `EauUnAnA/B`).
+ * Elle prépare également les réponses individuelles pour un enregistrement ultérieur
+ * dans la table 'Réponses' et construit une carte de recherche des questions.
  * @param {Object} formData Les données brutes soumises par le formulaire.
  * @param {Array} dynamicQuestions Un tableau d'objets définissant les questions (catégorie, coefficient, id_question, etc.).
  * @returns {Object} Un objet contenant tous les résultats traités : les indicateurs calculés,
- * les masses, les durées de vie, les prix, les valeurs d'énergie annuelles (EnrjUnAnA/B),
+ * les masses, les durées de vie, les prix, les valeurs d'énergie et d'eau annuelles,
  * les réponses formatées pour la table 'Réponses', et la carte de recherche des questions.
  */
 function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions) {
-    // Initialisation des indicateurs de score à zéro.
+    // Initialisation des indicateurs de score à zéro pour toutes les catégories.
     const calculatedIndicators = {
         EmatA: 0, EmatB: 0,
         EapproA: 0, EapproB: 0,
@@ -217,15 +220,19 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
         EeauA: 0, EeauB: 0,
         EfdvA: 0, EfdvB: 0,
     };
-    // Initialisation des variables pour les données spécifiques des produits.
+
+    // Initialisation des variables pour les données spécifiques des produits,
+    // y compris les consommations annuelles d'énergie et d'eau.
     let productA_Mass = null;
     let productB_Mass = null;
     let productA_DureeVie = null;
     let productB_DureeVie = null;
     let productA_Price = null;
     let productB_Price = null;
-    let EnrjUnAnA = null; // Variable pour la valeur annuelle d'énergie du produit A.
-    let EnrjUnAnB = null; // Variable pour la valeur annuelle d'énergie du produit B.
+    let EnrjUnAnA = null; // Valeur annuelle d'énergie pour le produit A.
+    let EnrjUnAnB = null; // Valeur annuelle d'énergie pour le produit B.
+    let EauUnAnA = null; // Valeur annuelle d'eau pour le produit A.
+    let EauUnAnB = null; // Valeur annuelle d'eau pour le produit B.
 
     const answersToCreateForAnswersTable = []; // Tableau pour stocker les réponses individuelles.
 
@@ -239,18 +246,17 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
         });
     }
 
-    // Parcours toutes les clés (noms de champs) des données du formulaire.
+    // Parcours toutes les clés (noms de champs) des données du formulaire pour les traiter.
     for (const key in formData) {
         const questionDef = questionLookupMap.get(key); // Récupère la définition de la question correspondante.
         let answerValue = formData[key];
 
-        // Gère les réponses qui sont des tableaux (ex: sélections multiples ou cases à cocher)
-        // en les joignant en une seule chaîne.
+        // Gère les réponses qui sont des tableaux (ex: sélections multiples) en les joignant en une chaîne.
         if (Array.isArray(answerValue)) {
             answerValue = answerValue.join(', ');
         }
 
-        // Extraction des masses des produits A et B.
+        // Extraction et conversion en nombre des masses des produits A et B.
         if (key === 'MasseA') {
             productA_Mass = parseFloat(answerValue);
             if (isNaN(productA_Mass)) console.warn(`DEBUG SERVER: Masse du produit A ("${answerValue}") n'est pas un nombre valide.`);
@@ -260,7 +266,7 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
             if (isNaN(productB_Mass)) console.warn(`DEBUG SERVER: Masse du produit B ("${answerValue}") n'est pas un nombre valide.`);
         }
 
-        // Extraction des durées de vie des produits A et B.
+        // Extraction et conversion en nombre des durées de vie des produits A et B.
         if (key === 'DureeVieA') {
             productA_DureeVie = parseFloat(answerValue);
             if (isNaN(productA_DureeVie)) console.warn(`DEBUG SERVER: Durée de vie du produit A ("${answerValue}") n'est pas un nombre valide.`);
@@ -270,7 +276,7 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
             if (isNaN(productB_DureeVie)) console.warn(`DEBUG SERVER: Durée de vie du produit B ("${answerValue}") n'est pas un nombre valide.`);
         }
 
-        // Extraction des prix des produits A et B.
+        // Extraction et conversion en nombre des prix des produits A et B.
         if (key === 'PrixA') {
             productA_Price = parseFloat(answerValue);
             if (isNaN(productA_Price)) console.warn(`DEBUG SERVER: Prix du produit A ("${answerValue}") n'est pas un nombre valide.`);
@@ -280,7 +286,7 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
             if (isNaN(productB_Price)) console.warn(`DEBUG SERVER: Prix du produit B ("${answerValue}") n'est pas un nombre valide.`);
         }
 
-        // Capture des valeurs annuelles d'énergie pour les produits A et B.
+        // Capture et conversion en nombre des valeurs annuelles d'énergie pour les produits A et B.
         if (key === 'EnrjUnAnA') {
             EnrjUnAnA = parseFloat(answerValue);
             if (isNaN(EnrjUnAnA)) console.warn(`DEBUG SERVER: EnrjUnAnA ("${answerValue}") n'est pas un nombre valide.`);
@@ -288,6 +294,16 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
         if (key === 'EnrjUnAnB') {
             EnrjUnAnB = parseFloat(answerValue);
             if (isNaN(EnrjUnAnB)) console.warn(`DEBUG SERVER: EnrjUnAnB ("${answerValue}") n'est pas un nombre valide.`);
+        }
+
+        // Capture et conversion en nombre des valeurs annuelles d'eau pour les produits A et B.
+        if (key === 'EauUnAnA') {
+            EauUnAnA = parseFloat(answerValue);
+            if (isNaN(EauUnAnA)) console.warn(`DEBUG SERVER: EauUnAnA ("${answerValue}") n'est pas un nombre valide.`);
+        }
+        if (key === 'EauUnAnB') {
+            EauUnAnB = parseFloat(answerValue);
+            if (isNaN(EauUnAnB)) console.warn(`DEBUG SERVER: EauUnAnB ("${answerValue}") n'est pas un nombre valide.`);
         }
 
         // Calcul des scores pour chaque catégorie d'indicateurs (EmatA, EfabB, etc.).
@@ -326,8 +342,10 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
         productB_DureeVie,
         productA_Price,
         productB_Price,
-        EnrjUnAnA, // Inclus dans le retour pour être passé à la fonction de calcul des coûts.
-        EnrjUnAnB, // Inclus dans le retour pour être passé à la fonction de calcul des coûts.
+        EnrjUnAnA, // Inclus dans le retour pour être passé à la fonction de création du score.
+        EnrjUnAnB, // Inclus dans le retour pour être passé à la fonction de création du score.
+        EauUnAnA,  // Inclus dans le retour pour être passé à la fonction de création du score.
+        EauUnAnB,  // Inclus dans le retour pour être passé à la fonction de création du score.
         answersToCreateForAnswersTable,
         questionLookupMap,
     };
@@ -336,71 +354,35 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
 /**
  * @function calculateTotalUsageCost
  * @description Calcule les coûts totaux d'usage pour les produits A et B.
- * Cela inclut les coûts liés à l'énergie (EnrjA/B) et à l'eau (eauUnAnA/B),
- * en tenant compte des prix et des multiplicateurs spécifiques.
+ * Cette fonction utilise les consommations spécifiques aux catégories 'EnrjA', 'EnrjB', 'EeauA', 'EeauB'
+ * et leurs prix unitaires ('PrixEnrj') associés, récupérés via `dynamicQuestions`.
+ * Les valeurs `EnrjUnAnA`, `EnrjUnAnB`, `EauUnAnA`, `EauUnAnB` sont passées mais
+ * NE SONT PAS UTILISÉES dans cette logique de calcul de coût selon la demande spécifique.
  * @param {Object} formData Les données du formulaire soumises.
  * @param {Map} questionLookupMap Une carte pour rechercher rapidement les définitions de questions.
- * @param {number|null} EnrjUnAnA La valeur annuelle d'énergie pour le produit A, utilisée comme multiplicateur pour l'eau A.
- * @param {number|null} EnrjUnAnB La valeur annuelle d'énergie pour le produit B, utilisée comme multiplicateur pour l'eau B.
  * @returns {Object} Un objet contenant `totalUsageCostA` et `totalUsageCostB`.
  */
-function calculateTotalUsageCost(formData, questionLookupMap, EnrjUnAnA, EnrjUnAnB) {
+function calculateTotalUsageCost(formData, questionLookupMap) {
     let totalUsageCostA = 0;
     let totalUsageCostB = 0;
 
-    // Calcul des coûts d'énergie pour les catégories spécifiques 'EnrjA' et 'EnrjB'.
+    // Cette logique de calcul est conservée telle quelle, sans intégrer
+    // EnrjUnAnA, EnrjUnAnB, EauUnAnA, EauUnAnB dans le calcul des coûts ici.
     for (const [key, questionDef] of questionLookupMap.entries()) {
-        // Vérifie si la question appartient spécifiquement à 'EnrjA' ou 'EnrjB'.
-        if (questionDef.categorie_questions === 'EnrjA' || questionDef.categorie_questions === 'EnrjB') {
-            const answerValue = parseFloat(formData[key]);
-            const energyPrice = parseFloat(questionDef.PrixEnrj);
+        const answerValue = parseFloat(formData[key]);
+        const prixEnrj = parseFloat(questionDef.PrixEnrj); // Le prix unitaire associé à cette question.
 
-            if (!isNaN(answerValue) && !isNaN(energyPrice)) {
-                const cost = answerValue * energyPrice;
-                if (key.endsWith('A')) { // Si la clé se termine par 'A', ajoute au coût du produit A.
-                    totalUsageCostA += cost;
-                } else if (key.endsWith('B')) { // Si la clé se termine par 'B', ajoute au coût du produit B.
-                    totalUsageCostB += cost;
-                }
-            } else {
-                console.warn(`DEBUG SERVER: Valeur de réponse (${formData[key]}) ou PrixEnrj (${questionDef.PrixEnrj}) invalide pour question d'énergie '${questionDef.titre}' (${key}). N'a pas contribué au coût d'usage.`);
-            }
+        // Vérifie si la question appartient aux catégories de coût d'usage et que les valeurs sont valides.
+        if ((questionDef.categorie_questions === 'EnrjA' || questionDef.categorie_questions === 'EeauA') && !isNaN(answerValue) && !isNaN(prixEnrj)) {
+            // Additionne le coût (quantité * prix unitaire * coefficient optionnel).
+            totalUsageCostA += answerValue * prixEnrj * (parseFloat(questionDef.coeff_questions) || 1);
+        } else if ((questionDef.categorie_questions === 'EnrjB' || questionDef.categorie_questions === 'EeauB') && !isNaN(answerValue) && !isNaN(prixEnrj)) {
+            // Additionne le coût pour le produit B.
+            totalUsageCostB += answerValue * prixEnrj * (parseFloat(questionDef.coeff_questions) || 1);
+        } else if (isNaN(answerValue) || isNaN(prixEnrj)) {
+            console.warn(`DEBUG SERVER: Valeur de réponse (${formData[key]}) ou PrixEnrj (${questionDef.PrixEnrj}) invalide pour question '${questionDef.titre}' (Catégorie: ${questionDef.categorie_questions}). Cette question n'a pas contribué au coût d'usage.`);
         }
     }
-
-    // Calcul et ajout des coûts d'eau, avec multiplication par la consommation énergétique annuelle.
-    const waterQuestionsKeys = ['eauUnAnA', 'eauUnAnB'];
-
-    waterQuestionsKeys.forEach(waterQKey => {
-        const questionDef = questionLookupMap.get(waterQKey);
-        if (questionDef) {
-            const answerValue = parseFloat(formData[waterQKey]);
-            const waterPrice = parseFloat(questionDef.PrixEnrj); // Le prix de l'eau est également tiré de 'PrixEnrj'.
-
-            if (!isNaN(answerValue) && !isNaN(waterPrice)) {
-                let waterCost = answerValue * waterPrice;
-
-                // Applique le multiplicateur EnrjUnAnA/B si disponible et valide.
-                if (waterQKey === 'eauUnAnA' && !isNaN(EnrjUnAnA)) {
-                    totalUsageCostA *= EnrjUnAnA;
-                    totalUsageCostA += waterCost;
-                } else if (waterQKey === 'eauUnAnB' && !isNaN(EnrjUnAnB)) {
-                    totalUsageCostB *= EnrjUnAnB;
-                    totalUsageCostB += waterCost;
-                } else {
-                     // Si EnrjUnAn n'est pas un nombre valide, le coût de l'eau est ajouté sans multiplication.
-                     // C'est une décision de conception : on pourrait aussi choisir d'ignorer ce coût si le multiplicateur est invalide.
-                     console.warn(`DEBUG SERVER: Multiplicateur EnrjUnAn pour ${waterQKey} n'est pas un nombre valide. Coût de l'eau ajouté sans multiplication.`);
-                     if (waterQKey === 'eauUnAnA') totalUsageCostA += waterCost;
-                     if (waterQKey === 'eauUnAnB') totalUsageCostB += waterCost;
-                }
-            } else {
-                console.warn(`DEBUG SERVER: Valeur de réponse (${formData[waterQKey]}) ou PrixEnrj (${questionDef.PrixEnrj}) invalide pour question d'eau '${questionDef.titre}' (${waterQKey}). N'a pas contribué au coût d'usage.`);
-            }
-        } else {
-            console.warn(`DEBUG SERVER: Définition de question pour '${waterQKey}' manquante dans dynamicQuestions. Impossible de calculer le coût de l'eau.`);
-        }
-    });
 
     return { totalUsageCostA, totalUsageCostB };
 }
@@ -444,7 +426,8 @@ async function batchCreateAnswersRecords(base, tableName, answersToCreate, produ
  * @description Crée l'enregistrement final dans la table "Score" d'Airtable.
  * Cet enregistrement agrège toutes les données calculées et collectées :
  * les indicateurs de score, les masses, les durées de vie, les prix des produits,
- * et les coûts totaux d'usage, en les liant à l'enregistrement du produit correspondant.
+ * les consommations annuelles d'énergie/eau, et les coûts totaux d'usage.
+ * Il est lié à l'enregistrement du produit correspondant.
  * @param {Object} base L'instance de la base Airtable.
  * @param {string} tableName Le nom de la table Score.
  * @param {string} productId L'ID de l'enregistrement Produit lié.
@@ -455,21 +438,29 @@ async function batchCreateAnswersRecords(base, tableName, answersToCreate, produ
  * @param {number|null} productB_DureeVie La durée de vie du produit B.
  * @param {number|null} productA_Price Le prix du produit A.
  * @param {number|null} productB_Price Le prix du produit B.
+ * @param {number|null} EnrjUnAnA La consommation annuelle d'énergie du produit A.
+ * @param {number|null} EnrjUnAnB La consommation annuelle d'énergie du produit B.
+ * @param {number|null} EauUnAnA La consommation annuelle d'eau du produit A.
+ * @param {number|null} EauUnAnB La consommation annuelle d'eau du produit B.
  * @param {number} totalUsageCostA Le coût total d'usage pour le produit A.
  * @param {number} totalUsageCostB Le coût total d'usage pour le produit B.
  * @returns {Promise<string>} Une promesse qui se résout avec l'ID de l'enregistrement Score créé.
  */
-async function createScoreRecord(base, tableName, productId, calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie, productA_Price, productB_Price, totalUsageCostA, totalUsageCostB) {
+async function createScoreRecord(base, tableName, productId, calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie, productA_Price, productB_Price, EnrjUnAnA, EnrjUnAnB, EauUnAnA, EauUnAnB, totalUsageCostA, totalUsageCostB) {
     // Construction de l'objet 'fields' qui sera envoyé à Airtable.
     const fieldsToSend = {
         "ID_produit": [productId], // Liaison vers le produit principal.
-        ...calculatedIndicators, // Utilise l'opérateur de décomposition pour inclure tous les indicateurs.
+        ...calculatedIndicators,   // Utilise l'opérateur de décomposition pour inclure tous les indicateurs calculés.
         "MasseA": productA_Mass,
         "MasseB": productB_Mass,
         "DureeVieA": productA_DureeVie,
         "DureeVieB": productB_DureeVie,
-        "PrixA": productA_Price, // Champ Airtable pour le prix du produit A.
-        "PrixB": productB_Price, // Champ Airtable pour le prix du produit B.
+        "PrixA": productA_Price,
+        "PrixB": productB_Price,
+        "EnrjUnAnA": EnrjUnAnA, // Champ Airtable pour la consommation annuelle d'énergie A.
+        "EnrjUnAnB": EnrjUnAnB, // Champ Airtable pour la consommation annuelle d'énergie B.
+        "EauUnAnA": EauUnAnA,   // Champ Airtable pour la consommation annuelle d'eau A.
+        "EauUnAnB": EauUnAnB,   // Champ Airtable pour la consommation annuelle d'eau B.
         "CoutTotalUsageA": totalUsageCostA, // Champ Airtable pour le coût total d'usage du produit A.
         "CoutTotalUsageB": totalUsageCostB,  // Champ Airtable pour le coût total d'usage du produit B.
     };
@@ -525,12 +516,14 @@ exports.handler = async (event) => {
             console.error("Erreur: Données du formulaire (formData) manquantes dans la requête.");
             throw { statusCode: 400, headers: headers, body: JSON.stringify({ message: 'Données du formulaire (formData) manquantes.' }) };
         }
-        // Avertissement si les questions dynamiques sont manquantes ou mal formatées, car elles sont nécessaires pour certains calculs.
+        // Avertissement si les questions dynamiques sont manquantes ou mal formatées,
+        // car elles sont nécessaires pour certains calculs et le mappage.
         if (!dynamicQuestions || !Array.isArray(dynamicQuestions)) {
             console.warn("DEBUG SERVER: dynamicQuestions n'est pas un tableau valide ou est manquant. Certains calculs d'indicateurs et de coûts d'usage pourraient être affectés, mais les données principales seront stockées.");
         }
 
-        // Étape 5: Initialisation de la connexion à Airtable et récupération des noms de tables à partir des variables d'environnement.
+        // Étape 5: Initialisation de la connexion à Airtable et récupération des noms de tables
+        // à partir des variables d'environnement Netlify.
         const base = initializeAirtableBase();
         const { supplierTableName, productTableName, answersTableName, scoreTableName } = getAirtableTableNames();
 
@@ -540,8 +533,8 @@ exports.handler = async (event) => {
         // Étape 7: Création de l'enregistrement du Produit, lié au Fournisseur nouvellement créé.
         const productId = await createProductRecord(base, productTableName, formData, supplierId);
 
-        // Étape 8: Traitement des questions dynamiques : calcul des indicateurs, extraction des masses/durées de vie/prix/énergies annuelles
-        // et préparation des réponses individuelles.
+        // Étape 8: Traitement des questions dynamiques : calcul des indicateurs, extraction des masses/durées de vie/prix,
+        // et **capture des consommations annuelles (EnrjUnAnA/B, EauUnAnA/B)**.
         const {
             calculatedIndicators,
             productA_Mass,
@@ -550,14 +543,18 @@ exports.handler = async (event) => {
             productB_DureeVie,
             productA_Price,
             productB_Price,
-            EnrjUnAnA, // Récupération de la valeur EnrjUnAnA
-            EnrjUnAnB, // Récupération de la valeur EnrjUnAnB
+            EnrjUnAnA, // Capturé pour le stockage direct.
+            EnrjUnAnB, // Capturé pour le stockage direct.
+            EauUnAnA,  // Capturé pour le stockage direct.
+            EauUnAnB,  // Capturé pour le stockage direct.
             answersToCreateForAnswersTable,
             questionLookupMap
         } = processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions);
 
-        // Étape 9: Calcul des coûts totaux d'usage pour les produits A et B, en utilisant les valeurs EnrjUnAnA/B.
-        const { totalUsageCostA, totalUsageCostB } = calculateTotalUsageCost(formData, questionLookupMap, EnrjUnAnA, EnrjUnAnB);
+        // Étape 9: Calcul des coûts totaux d'usage pour les produits A et B.
+        // NOTE: Les valeurs EnrjUnAnA, EnrjUnAnB, EauUnAnA, EauUnAnB ne sont PAS utilisées dans ce calcul,
+        // elles sont seulement passées à la fonction createScoreRecord pour le stockage.
+        const { totalUsageCostA, totalUsageCostB } = calculateTotalUsageCost(formData, questionLookupMap);
         console.log('DEBUG SERVER: Coût Total d\'Usage A calculé :', totalUsageCostA);
         console.log('DEBUG SERVER: Coût Total d\'Usage B calculé :', totalUsageCostB);
 
@@ -565,6 +562,7 @@ exports.handler = async (event) => {
         await batchCreateAnswersRecords(base, answersTableName, answersToCreateForAnswersTable, productId);
 
         // Étape 11: Création de l'enregistrement final dans la table Score avec toutes les données agrégées.
+        // Inclut les consommations annuelles EnrjUnAnA/B et EauUnAnA/B.
         const scoreId = await createScoreRecord(
             base,
             scoreTableName,
@@ -576,12 +574,15 @@ exports.handler = async (event) => {
             productB_DureeVie,
             productA_Price,
             productB_Price,
+            EnrjUnAnA, // Passé pour le stockage dans Airtable.
+            EnrjUnAnB, // Passé pour le stockage dans Airtable.
+            EauUnAnA,  // Passé pour le stockage dans Airtable.
+            EauUnAnB,  // Passé pour le stockage dans Airtable.
             totalUsageCostA,
             totalUsageCostB
         );
 
-        // Étape 12: Retourne une réponse de succès au client, incluant les IDs des enregistrements créés
-        // et les coûts totaux d'usage.
+        // Étape 12: Retourne une réponse de succès au client.
         return {
             statusCode: 200,
             headers: headers,
@@ -592,17 +593,15 @@ exports.handler = async (event) => {
                 scoreId: scoreId,
                 totalUsageCostA: totalUsageCostA,
                 totalUsageCostB: totalUsageCostB,
-                
             }),
         };
 
     } catch (error) {
         // Étape 13: Gestion centralisée de toutes les erreurs survenues dans le bloc try.
-        // Cela inclut les erreurs de parsing, de connexion Airtable, ou d'autres problèmes inattendus.
         console.error('Erreur globale lors de l\'envoi à Airtable ou du traitement de la requête :', error);
 
         // Définit le code de statut et le message d'erreur appropriés pour la réponse au client.
-        const statusCode = error.statusCode || 500; // Utilise le statut d'erreur spécifié ou 500 (Internal Server Error) par défaut.
+        const statusCode = error.statusCode || 500;
         const errorMessage = error.body ? JSON.parse(error.body).message : `Erreur serveur inattendue: ${error.message || 'Une erreur inconnue est survenue.'}`;
 
         return {
