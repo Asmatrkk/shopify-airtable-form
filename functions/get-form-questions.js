@@ -42,6 +42,7 @@ exports.handler = async (event) => {
             titre: record.get('Titre_questions'),
             type_questions: record.get('type_questions'),
             coeff_questions: record.get('coef_questions'),
+            PrixEnrj: record.get('PrixEnrj') || null ,
             categorie_questions: record.get('categorie_questions') || ''
         }));
 
