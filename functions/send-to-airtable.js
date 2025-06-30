@@ -382,10 +382,10 @@ function calculateTotalUsageCost(formData, questionLookupMap, EnrjUnAnA, EnrjUnA
 
                 // Applique le multiplicateur EnrjUnAnA/B si disponible et valide.
                 if (waterQKey === 'eauUnAnA' && !isNaN(EnrjUnAnA)) {
-                    waterCost *= EnrjUnAnA;
+                    totalUsageCostA *= EnrjUnAnA;
                     totalUsageCostA += waterCost;
                 } else if (waterQKey === 'eauUnAnB' && !isNaN(EnrjUnAnB)) {
-                    waterCost *= EnrjUnAnB;
+                    totalUsageCostB *= EnrjUnAnB;
                     totalUsageCostB += waterCost;
                 } else {
                      // Si EnrjUnAn n'est pas un nombre valide, le coût de l'eau est ajouté sans multiplication.
