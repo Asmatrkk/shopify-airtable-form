@@ -96,7 +96,7 @@ function getAirtableTableNames() {
     const supplierTableName = process.env.AIRTABLE_SUPPLIER_TABLE_NAME;
     const productTableName = process.env.AIRTABLE_PRODUCT_TABLE_NAME;
     const answersTableName = process.env.AIRTABLE_ANSWERS_TABLE_NAME;
-    const scoreTableName = process.env.AIRTABLE_SCORE_TABLE_NAME; // Réactivé
+    const scoreTableName = process.env.AIRTABLE_SCORE_TABLE_NAME;
 
     if (!supplierTableName || !productTableName || !answersTableName || !scoreTableName) {
         throw new Error("Un ou plusieurs noms de tables Airtable (Supplier, Product, Answers, Score) sont manquants dans les variables d'environnement.");
@@ -156,7 +156,7 @@ async function createProductRecord(base, tableName, formData, supplierId) {
  * et prépare les enregistrements pour la table des réponses.
  * @param {Object} formData - Les données du formulaire soumises par l'utilisateur.
  * @param {Array} dynamicQuestions - Les définitions des questions dynamiques (avec catégorie et coefficient).
- * @returns {Object} Un objet contenant les indicateurs calculés, les masses et les réponses à créer.
+ * @returns {Object} Un objet contenant les indicateurs calculés, les masses, les durées de vie et les réponses à créer.
  */
 function processDynamicQuestionsAndCalculateScores(formData, dynamicQuestions) {
     const calculatedIndicators = {
@@ -164,12 +164,14 @@ function processDynamicQuestionsAndCalculateScores(formData, dynamicQuestions) {
         EapproA: 0, EapproB: 0,
         EfabA: 0, EfabB: 0,
         EdistribA: 0, EdistribB: 0,
-        EnrjA: 0, EnrjB: 0, 
-        EeauA: 0, EeauB: 0, 
-        EfdvA: 0, EfdvB: 0, 
+        EnrjA: 0, EnrjB: 0,
+        EeauA: 0, EeauB: 0,
+        EfdvA: 0, EfdvB: 0,
     };
     let productA_Mass = null;
     let productB_Mass = null;
+    let productA_DureeVie = null; // Nouveau
+    let productB_DureeVie = null; // Nouveau
     const answersToCreate = [];
 
     // Crée une Map pour un accès rapide aux définitions complètes des questions.
@@ -216,6 +218,22 @@ function processDynamicQuestionsAndCalculateScores(formData, dynamicQuestions) {
             }
         }
 
+        // Récupère les durées de vie (nouveau)
+        if (key === 'DureeVieA') { // Assurez-vous que 'DureeVieA' est la clé envoyée par votre formulaire
+            productA_DureeVie = parseFloat(answerValue);
+            if (isNaN(productA_DureeVie)) {
+                console.warn(`DEBUG SERVER: Durée de vie du produit A ("${answerValue}") n'est pas un nombre valide. Stockée telle quelle.`);
+                productA_DureeVie = answerValue;
+            }
+        }
+        if (key === 'DureeVieB') { // Assurez-vous que 'DureeVieB' est la clé envoyée par votre formulaire
+            productB_DureeVie = parseFloat(answerValue);
+            if (isNaN(productB_DureeVie)) {
+                console.warn(`DEBUG SERVER: Durée de vie du produit B ("${answerValue}") n'est pas un nombre valide. Stockée telle quelle.`);
+                productB_DureeVie = answerValue;
+            }
+        }
+
         // Calcule et accumule les scores pour les catégories définies.
         if (questionDef && calculatedIndicators.hasOwnProperty(questionDef.categorie_questions)) {
             const numericAnswer = parseFloat(answerValue);
@@ -242,7 +260,7 @@ function processDynamicQuestionsAndCalculateScores(formData, dynamicQuestions) {
         }
     }
 
-    return { calculatedIndicators, productA_Mass, productB_Mass, answersToCreate };
+    return { calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie, answersToCreate };
 }
 
 /**
@@ -272,17 +290,18 @@ async function batchCreateAnswersRecords(base, tableName, answersToCreate, produ
 }
 
 /**
- * Crée l'enregistrement dans la table "Score" avec les indicateurs individuels et les masses.
- * Les scores globaux (Score_cycle_vie_1, Score_final_sur_5) ne sont PAS calculés ni inclus ici.
+ * Crée l'enregistrement dans la table "Score" avec les indicateurs individuels, les masses et les durées de vie.
  * @param {Object} base - L'instance de la base Airtable.
  * @param {string} tableName - Le nom de la table Score.
  * @param {string} productId - L'ID du produit lié.
  * @param {Object} calculatedIndicators - L'objet contenant tous les indicateurs (EmatA, EmatB, etc.).
  * @param {number|string} productA_Mass - La masse du produit A.
  * @param {number|string} productB_Mass - La masse du produit B.
+ * @param {number|string} productA_DureeVie - La durée de vie du produit A. // Nouveau paramètre
+ * @param {number|string} productB_DureeVie - La durée de vie du produit B. // Nouveau paramètre
  * @returns {string} L'ID de l'enregistrement Score créé.
  */
-async function createScoreRecord(base, tableName, productId, calculatedIndicators, productA_Mass, productB_Mass) {
+async function createScoreRecord(base, tableName, productId, calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie) {
     const scoreRecord = await base(tableName).create(
         [{
             fields: {
@@ -290,7 +309,8 @@ async function createScoreRecord(base, tableName, productId, calculatedIndicator
                 ...calculatedIndicators, // Dégage tous les indicateurs (EmatA, EmatB, etc.) dans l'objet fields.
                 "MasseA": productA_Mass,
                 "MasseB": productB_Mass,
-                // Score_cycle_vie_1 et Score_final_sur_5 ne sont pas inclus ici.
+                "DureeVieA": productA_DureeVie, // Nouveau champ
+                "DureeVieB": productB_DureeVie, // Nouveau champ
             }
         }],
         { typecast: true }
@@ -351,15 +371,15 @@ exports.handler = async (event) => {
         const productId = await createProductRecord(base, productTableName, formData, supplierId);
 
         // 7. Traiter les questions dynamiques et préparer les réponses.
-        // Les indicateurs individuels sont calculés ici.
-        const { calculatedIndicators, productA_Mass, productB_Mass, answersToCreate } =
+        // Les indicateurs individuels, les masses et les durées de vie sont calculés ici.
+        const { calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie, answersToCreate } =
             processDynamicQuestionsAndCalculateScores(formData, dynamicQuestions);
 
         // 8. Créer les enregistrements de Réponses par lots dans Airtable.
         await batchCreateAnswersRecords(base, answersTableName, answersToCreate, productId);
 
-        // 9. Créer l'enregistrement dans la table "Score" avec les indicateurs individuels et les masses.
-        const scoreId = await createScoreRecord(base, scoreTableName, productId, calculatedIndicators, productA_Mass, productB_Mass);
+        // 9. Créer l'enregistrement dans la table "Score" avec les indicateurs individuels, les masses et les durées de vie.
+        const scoreId = await createScoreRecord(base, scoreTableName, productId, calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie);
 
         // 10. Retourner une réponse de succès au client.
         return {
