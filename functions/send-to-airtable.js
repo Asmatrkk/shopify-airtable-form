@@ -1,21 +1,22 @@
 // netlify/functions/send-to-airtable.js
-// Importe les modules nécessaires.
+
+
+// Importation des modules nécessaires : 
 // `airtable` est la bibliothèque client pour interagir avec l'API Airtable.
-// `node-fetch` est un module pour effectuer des requêtes HTTP (bien que non utilisé directement pour les opérations Airtable ici,
-// il est souvent présent pour d'autres appels d'API).
 const Airtable = require('airtable');
+// `node-fetch` est un module pour effectuer des requêtes HTTP -> non utilisé directement pour les opérations Airtable ici, mais souvent présent pour d'autres appels d'API).
 const fetch = require('node-fetch');
 
 /**
  * @function getCorsHeaders
  * @description Configure et retourne les en-têtes CORS (Cross-Origin Resource Sharing).
- * Ces en-têtes sont cruciaux pour la sécurité et la permission des requêtes provenant
+ * Important pour la sécurité et la permission des requêtes provenant
  * d'un domaine externe (comme Shopify) d'accéder à cette fonction Netlify.
  * @returns {Object} Un objet contenant les en-têtes CORS.
  */
 function getCorsHeaders() {
     return {
-        // Définit l'origine spécifique (ton domaine Shopify) autorisée à effectuer des requêtes.
+        // Définit l'origine spécifique autorisée à effectuer des requêtes.
         // C'est une mesure de sécurité essentielle pour éviter les requêtes non autorisées.
         'Access-Control-Allow-Origin': 'https://nayorajewelry.com',
         // Spécifie les méthodes HTTP (POST, OPTIONS) que le client est autorisé à utiliser.
@@ -223,8 +224,10 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
     let productB_DureeVie = null;
     let productA_Price = null;
     let productB_Price = null;
-    let EnrjUnAnA = null; // Variable pour la valeur annuelle d'énergie du produit A.
-    let EnrjUnAnB = null; // Variable pour la valeur annuelle d'énergie du produit B.
+    let EnrjUnAnA = null;
+    let EnrjUnAnB = null; 
+    let eauUnAnA = null;
+    let eauUnAnB = null;
 
     const answersToCreateForAnswersTable = []; // Tableau pour stocker les réponses individuelles.
 
@@ -289,6 +292,16 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
             if (isNaN(EnrjUnAnB)) console.warn(`DEBUG SERVER: EnrjUnAnB ("${answerValue}") n'est pas un nombre valide.`);
         }
 
+        if (key === 'eauUnAnA') {
+            eauUnAnA = parseFloat(answerValue);
+            if (isNaN(eauUnAnA)) console.warn(`DEBUG SERVER: eauUnAnA ("${answerValue}") n'est pas un nombre valide.`);
+        }
+
+        if (key === 'eauUnAnB') {
+            eauUnAnB = parseFloat(answerValue);
+            if (isNaN(eauUnAnB)) console.warn(`DEBUG SERVER: eauUnAnB ("${answerValue}") n'est pas un nombre valide.`);
+        }
+
         // Calcul des scores pour chaque catégorie d'indicateurs (EmatA, EfabB, etc.).
         // Vérifie si une définition de question existe et si la catégorie est une propriété de `calculatedIndicators`.
         if (questionDef && calculatedIndicators.hasOwnProperty(questionDef.categorie_questions)) {
@@ -325,10 +338,12 @@ function processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions)
         productB_DureeVie,
         productA_Price,
         productB_Price,
-        EnrjUnAnA, // Inclus dans le retour pour être passé à la fonction de calcul des coûts.
-        EnrjUnAnB, // Inclus dans le retour pour être passé à la fonction de calcul des coûts.
+        EnrjUnAnA, 
+        EnrjUnAnB, 
         answersToCreateForAnswersTable,
         questionLookupMap,
+        eauUnAnA,
+        eauUnAnB,
     };
 }
 
@@ -460,7 +475,24 @@ async function batchCreateAnswersRecords(base, tableName, answersToCreate, produ
  * @param {number} totalUsageCostB Le coût total d'usage pour le produit B.
  * @returns {Promise<string>} Une promesse qui se résout avec l'ID de l'enregistrement Score créé.
  */
-async function createScoreRecord(base, tableName, productId, calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie, productA_Price, productB_Price, totalUsageCostA, totalUsageCostB) {
+async function createScoreRecord(
+    base,
+    tableName,
+    productId,
+    calculatedIndicators,
+    productA_Mass,
+    productB_Mass,
+    productA_DureeVie,
+    productB_DureeVie,
+    productA_Price,
+    productB_Price,
+    totalUsageCostA,
+    totalUsageCostB,
+    EnrjUnAnA,
+    EnrjUnAnB,
+    eauUnAnA,
+    eauUnAnB
+) {
     // Construction de l'objet 'fields' qui sera envoyé à Airtable.
     const fieldsToSend = {
         "ID_produit": [productId], // Liaison vers le produit principal.
@@ -473,6 +505,10 @@ async function createScoreRecord(base, tableName, productId, calculatedIndicator
         "PrixB": productB_Price, // Champ Airtable pour le prix du produit B.
         "CoutTotalUsageA": totalUsageCostA, // Champ Airtable pour le coût total d'usage du produit A.
         "CoutTotalUsageB": totalUsageCostB,  // Champ Airtable pour le coût total d'usage du produit B.
+        "EnrjUnAnA": EnrjUnAnA,
+        "EnrjUnAnB": EnrjUnAnB,
+        "eauUnAnA": eauUnAnA,
+        "eauUnAnB": eauUnAnB,
     };
 
     console.log('DEBUG SERVER: Champs préparés pour la table Score Airtable :', fieldsToSend);
@@ -551,10 +587,12 @@ exports.handler = async (event) => {
             productB_DureeVie,
             productA_Price,
             productB_Price,
-            EnrjUnAnA, // Récupération de la valeur EnrjUnAnA
-            EnrjUnAnB, // Récupération de la valeur EnrjUnAnB
+            EnrjUnAnA, 
+            EnrjUnAnB, 
             answersToCreateForAnswersTable,
-            questionLookupMap
+            questionLookupMap,
+            eauUnAnA,
+            eauUnAnB
         } = processDynamicQuestionsAndCollectAllAnswers(formData, dynamicQuestions);
 
         // Étape 9: Calcul des coûts totaux d'usage pour les produits A et B, en utilisant les valeurs EnrjUnAnA/B.
@@ -578,7 +616,11 @@ exports.handler = async (event) => {
             productA_Price,
             productB_Price,
             totalUsageCostA,
-            totalUsageCostB
+            totalUsageCostB,
+            EnrjUnAnA,
+            EnrjUnAnB,
+            eauUnAnA,
+            eauUnAnB
         );
 
         // Étape 12: Retourne une réponse de succès au client, incluant les IDs des enregistrements créés
