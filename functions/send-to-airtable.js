@@ -166,25 +166,34 @@ async function batchCreateAnswersRecords(base, tableName, answers, productId) {
     }
 }
 
-async function createBDDProductsRecord(base, tableName, questionLookupMap, formData, productId, productName) {
-    const fields = {
-        "ID_produit": [productId],
-        "nom_produit": productName,
-    };
+async function createBDDProductsRecord(base, tableName, questionLookupMap, formData, productId) {
+    const fieldsPerIndicator = {};
 
-    console.log('🟡 DEBUG - Début remplissage BDD produits');
-    for (const [indicator, q] of questionLookupMap.entries()) {
-        const v = formData[indicator];
-        if (v !== undefined && v !== null && String(v).trim() !== '') {
-            fields[indicator] = Array.isArray(v) ? v.join(', ') : v;
-            console.log(`🟢 Champ ajouté : ${indicator} = ${fields[indicator]}`);
+    for (const [key, questionDef] of questionLookupMap.entries()) {
+        const value = formData[key];
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+            // Sauter si c'est le champ nom_produit (pour éviter l'erreur)
+            if (questionDef.indicateur_questions === 'nom_produit') {
+                console.log(`DEBUG BDD PRODUITS: Champ "${key}" ignoré car il correspond à un champ calculé.`);
+                continue;
+            }
+            fieldsPerIndicator[questionDef.indicateur_questions] = String(value);
+            console.log(`DEBUG BDD PRODUITS: Champ ajouté "${questionDef.indicateur_questions}" = "${value}"`);
         } else {
-            console.warn(`⚠️ Champ ignoré ou vide : ${indicator}`);
+            console.log(`DEBUG BDD PRODUITS: Champ ignoré "${key}" car vide ou invalide.`);
         }
     }
-    await base(tableName).create([{ fields }], { typecast: true });
-    console.log('✅ DEBUG - Enregistrement BDD produits créé.');
+
+    const fieldsToSend = {
+        "ID_produit": [productId],
+        ...fieldsPerIndicator
+    };
+
+    const record = await base(tableName).create([{ fields: fieldsToSend }], { typecast: true });
+    console.log(`INFO: Enregistrement BDD Produits créé avec ID : ${record[0].id}`);
+    return record[0].id;
 }
+
 
 async function createScoreRecord(base, tableName, productId, calculatedIndicators, productA_Mass, productB_Mass, productA_DureeVie, productB_DureeVie, productA_Price, productB_Price, EnrjUnAnA, EnrjUnAnB, eauUnAnA, eauUnAnB) {
     const rec = await base(tableName).create([{
